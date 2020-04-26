@@ -1,0 +1,1 @@
+This folder contains the main plots created using the scripts in `analysis/plots`.
