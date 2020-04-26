@@ -1,0 +1,1 @@
+This folder contains the honors thesis and any associated files.
