@@ -44,3 +44,8 @@ thesis/thesis-reviews
 
 # thesis references
 thesis/references
+
+# proposal and defensde-presentation should be skipped
+/defense-presentation/
+/proposal/
+
