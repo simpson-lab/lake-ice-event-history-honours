@@ -120,10 +120,10 @@ WorldData <-
 
 plt.dur <- ggplot(mapping = aes(long, lat, fill = mu.clipped)) +
   facet_wrap(Year ~ ., ncol = 3) +
-  geom_map(aes(long, lat, group = group), WorldData, fill = 'transparent',
-               color = 'grey') +
   geom_tile(data = pred.dur.na) +
   geom_tile(data = pred.dur.eura) +
+  geom_map(aes(map_id = region), WorldData, map = WorldData, fill = 'transparent',
+           color = 'grey', inherit.aes = FALSE) +
   coord_map('azequidistant', xlim = c(-180, 180), ylim = c(30, 90)) +
   labs(x = NULL, y = NULL) +
   scale_x_continuous(breaks = NULL) +
