@@ -93,14 +93,12 @@ lm.suwa.freeze <- lm(On.DOY.jul ~ Year, data = suwa) # fit a LM
 segm.suwa.freeze <- segmented(lm.suwa.freeze, seg.Z = ~Year) # segment the LM
 
 pred.segm.suwa.freeze <-
-  predict(segm.suwa.freeze,
-          tibble(Year = seq_range(suwa$Year, 400)),
-          se.fit = TRUE, interval = 'predict') %>%
+  predict(segm.suwa.freeze, tibble(Year = seq_range(suwa$Year, 400)), se.fit = TRUE) %>%
   as.data.frame() %>%
   transmute(Year = seq_range(suwa$Year, 400),
-            mu = fit.fit,
-            lwr = fit.lwr,
-            upr = fit.upr)
+            mu = fit,
+            lwr = mu + qnorm((1 - 0.89) / 2),
+            upr = mu + qnorm((1 + 0.89) / 2))
 
 plt.suwa.freeze +
   geom_ribbon(aes(x = Year, ymin = lwr, ymax = upr), pred.segm.suwa.freeze,
@@ -137,12 +135,6 @@ pam.thaw <- gam(ped_status ~
 ggplot(suwa, aes(Year, duration)) +
   geom_point(na.rm = TRUE)
 
-# model diagnostics
-layout(matrix(1:4, ncol = 2))
-gam.check(pam.freeze)
-gam.check(pam.thaw)
-layout(1)
-
 # model summaries (aprroximate p-values)
 summary(pam.freeze)
 summary(pam.thaw)
@@ -160,7 +152,6 @@ pred.freeze <-
          f.p.lwr = 1 - surv_lower,
          f.p.upr = 1 - surv_upper)
   
-
 # to find the average freezing day
 pred.freeze.full <-
   suwa.freeze %>%
@@ -170,9 +161,10 @@ pred.freeze.full <-
   add_cumu_hazard(pam.freeze) %>%
   add_surv_prob(pam.freeze) %>%
   ungroup() %>%
-  mutate(p = 1 - surv_prob)
+  mutate(p = 1 - surv_prob,
+         p.lwr = 1 - surv_lower,
+         p.upr = 1 - surv_upper)
 
-### test #####
 # expected freezing date
 pred.freeze.mean <-
   filter(pred.freeze.full, round(p, 1) == 0.5)%>%
@@ -182,14 +174,14 @@ pred.freeze.mean <-
 
 # upper CI limit
 pred.freeze.upr <-
-  filter(pred.freeze.full, round(p, 2) == 0.98) %>%
+  filter(pred.freeze.full, round(p.upr, 1) == 0.5) %>%
   group_by(Year, p) %>%
   mutate(tend = mean(tend)) %>%
   ungroup()
 
 # lower CI limit
 pred.freeze.lwr <-
-  filter(pred.freeze.full, round(p, 2) == 0.03) %>%
+  filter(pred.freeze.full, round(p.lwr, 1) == 0.5) %>%
   group_by(Year, p) %>%
   mutate(tend = mean(tend)) %>%
   ungroup()
@@ -213,21 +205,21 @@ ggplot() +
   theme(legend.position = 'top')
 
 # plot pam and segmented regression
-preds <- bind_rows(mutate(pred.segm.suwa.freeze, Model = 'CSR'),
+preds <- bind_rows(mutate(pred.segm.suwa.freeze, Model = 'SRM'),
                    mutate(pred.freeze.lines, Model = 'PAM')) %>%
   as_tibble()
 
-plt.csr.pam.freeze <- 
+plt.srm.pam.freeze <- 
   plt.suwa.freeze +
   
   geom_ribbon(aes(Year, ymin = lwr, ymax = upr, fill = Model), preds, alpha = 0.25, na.rm = TRUE) +
-  geom_line(aes(Year, mu, color = Model), filter(preds, Model == 'CSR'), lwd = 1) +
+  geom_line(aes(Year, mu, color = Model), filter(preds, Model == 'SRM'), lwd = 1) +
   geom_smooth(aes(Year, mu, color = Model), filter(preds, Model == 'PAM'), method = 'gam',
               formula = y ~ s(x), na.rm = TRUE) +
   scale_color_manual('Model', values = pal) +
   scale_fill_manual('Model', values = pal) +
-  theme(legend.position = 'bottom'); plt.csr.pam.freeze
-#save.plt(plt.csr.pam.freeze, 'suwa-csr-pam-freeze.pdf', height = 6, width = 6)
+  theme(legend.position = 'bottom'); plt.srm.pam.freeze
+#save.plt(plt.srm.pam.freeze, 'suwa-srm-pam-freeze.pdf', height = 6, width = 6)
 
 # other plots ----
 # stepwise hazard
@@ -287,3 +279,29 @@ pred.thaw %>%
   geom_line(aes(col = Year)) +
   geom_ribbon(aes(fill = Year), alpha = 0.2) +
   labs(x = sept.lab, y = 'Probability of being ice-free')
+
+# example for finding 89% CIs
+d <- tibble(q = seq(65, 135, length.out = 1000),
+            p = pgamma(q, shape = 200, rate = 2),
+            lwr = pgamma(q, shape = 190, rate = 2),
+            upr = pgamma(q, shape = 214, rate = 2),
+            zero = 0)
+plt.fict <-
+  ggplot() +
+  # estimate of the mean
+  geom_line(aes(q, p), d, col = pal[1], lwd = 1) +
+  geom_ribbon(aes(q, ymin = lwr, ymax = upr), d, fill = pal[1], alpha = 0.3) +
+  
+  # horizontal segment
+  geom_segment(aes(x = 65, xend = 106.83, y = 0.500, yend = 0.500), lty = 'dashed') +
+
+  # vertical segments
+  geom_segment(aes(x = qgamma(0.5, 190, 2), xend = qgamma(0.5, 190, 2),
+                   y = -0.02, yend = 0.5), lty = 'dashed') +
+  geom_segment(aes(x = qgamma(0.5, 200, 2), xend = qgamma(0.500, 200, 2),
+                   y = -0.02, yend = 0.5), lty = 'dashed') +
+  geom_segment(aes(x = qgamma(0.5, 214, 2), xend = qgamma(0.5, 214, 2),
+                   y = -0.02, yend = 0.5), lty = 'dashed') +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0.01)) +
+  labs(x = june.lab, y = 'Probability of being frozen'); plt.fict

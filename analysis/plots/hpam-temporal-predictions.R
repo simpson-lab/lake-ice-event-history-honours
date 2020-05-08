@@ -83,8 +83,12 @@ pred.freeze.na <-
                tend = unique(tend),
                Year = years) %>%
   group_by(Year) %>%
-  add_cumu_hazard(pam.freeze.na, terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
-  add_surv_prob(pam.freeze.na, terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
+  add_cumu_hazard(pam.freeze.na,
+                  se_mult = qnorm(0.945),
+                  terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
+  add_surv_prob(pam.freeze.na,
+                se_mult = qnorm(0.945),
+                terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
   mutate(p = 1 - surv_prob,
          p.lwr = 1 - surv_lower,
          p.upr = 1 - surv_upper) %>%
@@ -95,13 +99,16 @@ pred.thaw.na <-
                tend = unique(tend),
                Year = years) %>%
   group_by(Year) %>%
-  add_cumu_hazard(pam.thaw.na, terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
-  add_surv_prob(pam.thaw.na, terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
+  add_cumu_hazard(pam.thaw.na,
+                  se_mult = qnorm(0.945),
+                  terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
+  add_surv_prob(pam.thaw.na,
+                se_mult = qnorm(0.945),
+                terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
   mutate(p = 1 - surv_prob,
          p.lwr = 1 - surv_lower,
          p.upr = 1 - surv_upper) %>%
   select(tstart, tend, Year, cumu_hazard, cumu_lower, cumu_upper, p, p.lwr, p.upr)
-
 
 # Eurasia
 pred.freeze.eura <- 
@@ -109,8 +116,12 @@ pred.freeze.eura <-
                tend = unique(tend),
                Year = years) %>%
   group_by(Year) %>%
-  add_cumu_hazard(pam.freeze.eura, terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
-  add_surv_prob(pam.freeze.eura, terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
+  add_cumu_hazard(pam.freeze.eura,
+                  se_mult = qnorm(0.945),
+                  terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
+  add_surv_prob(pam.freeze.eura,
+                se_mult = qnorm(0.945),
+                terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
   mutate(p = 1 - surv_prob,
          p.lwr = 1 - surv_lower,
          p.upr = 1 - surv_upper) %>%
@@ -121,8 +132,12 @@ pred.thaw.eura <-
                tend = unique(tend),
                Year = years) %>%
   group_by(Year) %>%
-  add_cumu_hazard(pam.thaw.eura, terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
-  add_surv_prob(pam.thaw.eura, terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
+  add_cumu_hazard(pam.thaw.eura,
+                  se_mult = qnorm(0.945),
+                  terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
+  add_surv_prob(pam.thaw.eura,
+                se_mult = qnorm(0.945),
+                terms = c('s(tend)', 's(Year)', 's(tend,Year)')) %>%
   mutate(p = 1 - surv_prob,
          p.lwr = 1 - surv_lower,
          p.upr = 1 - surv_upper) %>%

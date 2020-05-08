@@ -1,6 +1,6 @@
 # setup ####
 # install if necessary
-#devtools::install_github('adibender/pammtools')
+#install.packages('adibender/pammtools')
 
 # data accessing
 library('here')      # for easier directory referencing, conflicts w/ lubridate::here
@@ -46,8 +46,9 @@ sept.lab <- expression(Days~after~September~30^{th})
 bp.ice.weekly <- read_csv(here::here('data', 'bp-weekly-data.csv'), guess_max = 1900) %>%
   transmute(Year = year,                                                   # rename
             week = week,                                                   # keep week column
+            temp = temp,                                                   # keep temp column
             date = date(paste0(Year - 1, '-12-31')) + week * 7,
-            frozen = if_else(week < iceonweek & week > iceoffweek, 0, 1), # was BP frozen?
+            frozen = if_else(week < iceonweek & week > iceoffweek, 0, 1),  # was BP frozen?
             july.year = paste0(Year - 1, '-', Year))
 
 # add a column for "number of days after June 30"
@@ -56,6 +57,9 @@ bp.ice.weekly$doy.jul <- post.ref.date('date', bp.ice.weekly, event = 'freeze')
 # yearly format
 bp.ice <- read_csv(here::here('data', 'bp-weekly-data.csv'), guess_max = 1900) %>%
   transmute(Year = year,
+            temp = temp,
+            on.week = iceonweek,
+            off.week = iceoffweek,
             on.date = as.Date(paste0(Year - 1, '-12-31')) + iceondoy,     # Dec 31 of previous year + DOY
             off.date = as.Date(paste0(Year - 1, '-12-31')) + iceoffdoy,   # Dec 31 of previous year + DOY
             season = paste0(Year, '-', Year + 1),                         # year starting in July, like academic year
@@ -95,12 +99,20 @@ bp.ice <- mutate(bp.ice,
 
 # format to Piece-wise Exponential Data (PED)
 bp.freeze <-
-  select(bp.ice, -'off.doy.oct', -'off.date', -'duration') %>%
+  bp.ice %>%
+  group_by(Year) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(on.doy.jul, observed, Year) %>%
   as_ped(formula = Surv(time = on.doy.jul,     # follow-up time
                         event = observed) ~ .) # censored or not
 
 bp.thaw <-
-  select(bp.ice, -'on.doy.jul', -'on.date', -'duration') %>%
+  bp.ice %>%
+  group_by(Year) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(off.doy.oct, observed, Year) %>%
   as_ped(formula = Surv(time = off.doy.oct,    # follow-up time
                         event = observed) ~ .) # event
 
@@ -119,9 +131,9 @@ bp.thaw <-
 
 # model hazard of freezing
 pam.bp.freeze <- gam(ped_status ~
-                       s(tend, bs = 'cr', k = 10) +       # effect of DOY
-                       s(Year, bs = 'cr', k = 10) +       # effect of Year
-                       ti(tend, Year, bs = 'cr', k = 5),  # tensor interaction
+                       s(tend, bs = 'cr', k = 5) +       # effect of DOY
+                       s(Year, bs = 'cr', k = 10) +      # effect of Year
+                       ti(tend, Year, bs = 'cr', k = 5), # change in effect of DOY over years
                      data = bp.freeze,
                      family = poisson('log'),             # response of Y
                      offset = offset,                     # account for censoring
@@ -130,9 +142,9 @@ pam.bp.freeze <- gam(ped_status ~
 
 # model hazard of thawing
 pam.bp.thaw <- gam(ped_status ~
-                     s(tend, bs = 'cr', k = 10) +       # smooth effect of DOY ("follow-up dates") on hazard
-                     s(Year, bs = 'cr', k = 10) +       # smooth effect of Year on hazard
-                     ti(tend, Year, bs = 'cr', k = 5),  # how the effect of tend changes over the years
+                     s(tend, bs = 'cr', k = 5) +       # smooth effect of DOY ("follow-up dates") on hazard
+                     s(Year, bs = 'cr', k = 10) +      # smooth effect of Year on hazard
+                     ti(tend, Year, bs = 'cr', k = 5), # tensor interaction
                    data = bp.thaw,
                    family = poisson('log'),
                    offset = offset,
@@ -165,9 +177,9 @@ pred.freeze.year <-
   make_newdata(tend = unique(tend),
                Year = round(seq_range(1980:2014, n = 5))) %>%
   group_by(Year) %>%
-  add_hazard(pam.bp.freeze) %>%
-  add_cumu_hazard(pam.bp.freeze) %>%
-  add_surv_prob(pam.bp.freeze) %>%
+  add_hazard(pam.bp.freeze, se_mult = qnorm(0.945)) %>%
+  add_cumu_hazard(pam.bp.freeze, se_mult = qnorm(0.945)) %>%
+  add_surv_prob(pam.bp.freeze, se_mult = qnorm(0.945)) %>%
   mutate(freeze.prob = 1 - surv_prob,
          f.p.lwr = 1 - surv_lower,
          f.p.upr = 1 - surv_upper)
@@ -178,9 +190,9 @@ pred.freeze.tend <-
   make_newdata(tend = seq_range(tend, n = 5),
                Year = seq_range(Year, by = 1)) %>%
   group_by(tend) %>%
-  add_hazard(pam.bp.freeze) %>%
-  add_cumu_hazard(pam.bp.freeze) %>%
-  add_surv_prob(pam.bp.freeze) %>%
+  add_hazard(pam.bp.freeze, se_mult = qnorm(0.945)) %>%
+  add_cumu_hazard(pam.bp.freeze, se_mult = qnorm(0.945)) %>%
+  add_surv_prob(pam.bp.freeze, se_mult = qnorm(0.945)) %>%
   mutate(freeze.prob = 1 - surv_prob,
          f.p.lwr = 1 - surv_lower,
          f.p.upr = 1 - surv_upper)
@@ -236,9 +248,9 @@ pred.thaw.year <-
   make_newdata(tend = unique(tend), 
                Year = round(seq_range(1980:2014, n = 5))) %>%
   group_by(Year) %>%
-  add_hazard(pam.bp.thaw) %>%
-  add_cumu_hazard(pam.bp.thaw) %>%
-  add_surv_prob(pam.bp.thaw) %>%
+  add_hazard(pam.bp.thaw, se_mult = qnorm(0.945)) %>%
+  add_cumu_hazard(pam.bp.thaw, se_mult = qnorm(0.945)) %>%
+  add_surv_prob(pam.bp.thaw, se_mult = qnorm(0.945)) %>%
   mutate(thaw.prob = 1 - surv_prob,
          t.p.lwr = 1 - surv_lower,
          t.p.upr = 1 - surv_upper)
@@ -249,9 +261,9 @@ pred.thaw.tend <-
   make_newdata(tend = seq_range(tend, n = 5),
                Year = seq_range(Year, by = 1)) %>%
   group_by(tend) %>%
-  add_hazard(pam.bp.thaw) %>%
-  add_cumu_hazard(pam.bp.thaw) %>%
-  add_surv_prob(pam.bp.thaw) %>%
+  add_hazard(pam.bp.thaw, se_mult = qnorm(0.945)) %>%
+  add_cumu_hazard(pam.bp.thaw, se_mult = qnorm(0.945)) %>%
+  add_surv_prob(pam.bp.thaw, se_mult = qnorm(0.945)) %>%
   mutate(thaw.prob = 1 - surv_prob,
          t.p.lwr = 1 - surv_lower,
          t.p.upr = 1 - surv_upper)

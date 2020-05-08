@@ -82,7 +82,7 @@ sum(stechlinsee$duration == 0) / nrow(stechlinsee) # half of response values are
 
 # qqplot
 stech.tw.qq <-
-  qq_plot(stech.tw, method = 'simulate', n_simulate = 1e4, level = 0.95) +
+  qq_plot(stech.tw, method = 'simulate', n_simulate = 1e4, level = 0.89) +
   labs(title = NULL, subtitle = NULL)
 
 # normal density for reference
@@ -125,9 +125,9 @@ pred.freeze.year <-
   make_newdata(tend = unique(tend),
                Year = round(seq_range(Year, n = 5))) %>%
   group_by(Year) %>%
-  add_hazard(pam.freeze.stech) %>%
-  add_cumu_hazard(pam.freeze.stech) %>%
-  add_surv_prob(pam.freeze.stech) %>%
+  add_hazard(pam.freeze.stech, se_mult = qnorm(0.945)) %>%
+  add_cumu_hazard(pam.freeze.stech, se_mult = qnorm(0.945)) %>%
+  add_surv_prob(pam.freeze.stech, se_mult = qnorm(0.945)) %>%
   mutate(freeze.prob = 1 - surv_prob,
          f.p.lwr = 1 - surv_lower,
          f.p.upr = 1 - surv_upper)
@@ -163,9 +163,9 @@ pred.thaw.year <-
   make_newdata(tend = unique(tend), 
                Year = round(seq_range(Year, n = 5))) %>%
   group_by(Year) %>%
-  add_hazard(pam.thaw.stech) %>%
-  add_cumu_hazard(pam.thaw.stech) %>%
-  add_surv_prob(pam.thaw.stech) %>%
+  add_hazard(pam.thaw.stech, se_mult = qnorm(0.945)) %>%
+  add_cumu_hazard(pam.thaw.stech, se_mult = qnorm(0.945)) %>%
+  add_surv_prob(pam.thaw.stech, se_mult = qnorm(0.945)) %>%
   mutate(thaw.prob = 1 - surv_prob,
          t.p.lwr = 1 - surv_lower,
          t.p.upr = 1 - surv_upper)
@@ -200,7 +200,9 @@ pred.tw <- tibble(Year = seq_min_max(stechlinsee$Year, 400))
 pred.tw <- 
   cbind(pred.tw,
         predict(stech.tw, pred.tw, se.fit = TRUE)) %>%
-  mutate(mu = exp(fit), upr = exp(fit + se.fit * 1.96), lwr = exp(fit - se.fit * 1.96))
+  mutate(mu = exp(fit),
+         lwr = exp(fit - se.fit * qnorm(0.945)),
+         upr = exp(fit + se.fit * qnorm(0.945)))
 
 # hurdle gamma
 pred.hg <- tibble(Year = seq_min_max(stechlinsee$Year, 400))

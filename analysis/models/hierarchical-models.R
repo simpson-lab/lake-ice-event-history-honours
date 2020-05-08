@@ -251,11 +251,11 @@ gam.dur.eura <- bam(duration ~
 
 # bad qqplots!
 qq.tw.na <-
-  qq_plot(gam.dur.na, method = 'simulate', n_simulate = 1000, level = 0.95) +
+  qq_plot(gam.dur.na, method = 'simulate', n_simulate = 1000, level = 0.89) +
   theme(title = element_blank())
 
 qq.tw.eura <-
-  qq_plot(gam.dur.eura, method = 'simulate', n_simulate = 1000, level = 0.95) +
+  qq_plot(gam.dur.eura, method = 'simulate', n_simulate = 1000, level = 0.89) +
   theme(title = element_blank())
 
 plt.dur.tw.qq <- plot_grid(NULL, qq.tw.na, NULL, qq.tw.eura, labels = c('a.', NA, 'b.', NA),

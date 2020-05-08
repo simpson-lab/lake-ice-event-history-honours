@@ -37,4 +37,4 @@ plot_grid(plt.fun('log.hazard'),
           plt.fun('cumu_hazard'),
           plt.fun('surv'),
           labels = c('a.', 'b.', 'c.', 'd.'))
-save.plt(last_plot(), 'hazard-viz.pdf')
+#save.plt(last_plot(), 'hazard-viz.pdf')

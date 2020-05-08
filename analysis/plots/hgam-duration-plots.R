@@ -4,7 +4,8 @@ library('here')      # for easier directory referencing, conflicts with lubridat
 library('readr')     # to read in files as tibbles
 
 # data editing
-library('dplyr')     # makes data editing easier
+library('dplyr')     # makes data wrangling easier
+library('tidyr')     # makes data wrangling easier
 library('tibble')    # a tibble is a fancy data.frame
 
 # model fitting
@@ -59,58 +60,6 @@ plt.obs.fit <-
             labels = c('a.', 'b.'), ncol = 1)
 #save.plt(plt.obs.fit, 'gam-dur-fit-obs.pdf', width = 7, height = 10)
 
-# average trends
-## north america
-# new data for predictions
-newd.dur.na <- expand.grid(Year = years,
-                           long = seq(min(ice.na$long) - 5,
-                                      max(ice.na$long) + 5,
-                                      length.out = 150),
-                           lat = seq(min(ice.na$lat) - 5,
-                                     max(ice.na$lat) + 5,
-                                     length.out = 150),
-                           lake = 'NA')
-
-# predict w/o random effects
-pred.dur.na <- predict(gam.dur.na, newdata = newd.dur.na,
-                       terms = c('s(Year)', 's(long,lat)',
-                                 'ti(Year,lat,long)',
-                                 's.1(Year)', 's.1(long,lat)',
-                                 's.2(Year)', 's.2(long,lat)'),
-                       se.fit = FALSE)
-pred.dur.na <- as_tibble(pred.dur.na)
-pred.dur.na <- mutate(pred.dur.na, mu = exp(V1))   # map from link scale onto response scale
-pred.dur.na <- bind_cols(pred.dur.na, newd.dur.na) # bind pred + newd
-
-# eurasia
-newd.dur.eura <- expand.grid(Year = years,
-                             long = seq(min(ice.eura$long) - 5,
-                                        max(ice.eura$long) + 5,
-                                        length.out = 150),
-                             lat = seq(min(ice.eura$lat) - 5,
-                                       max(ice.eura$lat) + 5,
-                                       length.out = 150),
-                             lake = 'NA')
-pred.dur.eura <- predict(gam.dur.eura, newdata = newd.dur.eura,
-                         terms = c('s(Year)', 's(long,lat)',
-                                   'ti(Year,lat,long)',
-                                   's.1(Year)', 's.1(long,lat)',
-                                   's.2(Year)', 's.2(long,lat)'),
-                         se.fit = FALSE)
-pred.dur.eura <- as_tibble(pred.dur.eura)
-pred.dur.eura <- mutate(pred.dur.eura, mu = exp(V1))
-pred.dur.eura <- bind_cols(pred.dur.eura, newd.dur.eura)
-
-# prevent predictions from being too far from the data
-pred.dur.na <- mutate(pred.dur.na,
-                      mu = if_else(mu < 366, mu, 366),
-                      too.far = exclude.too.far(long, lat, ice.na$long, ice.na$lat, .15),
-                      mu.clipped = if_else(too.far, NA_real_, mu))
-pred.dur.eura <- mutate(pred.dur.eura,
-                        mu = if_else(mu < 366, mu, 366),
-                        too.far = exclude.too.far(long, lat, ice.eura$long, ice.eura$lat, .15),
-                        mu.clipped = if_else(too.far, NA_real_, mu))
-
 # maps
 WorldData <-
   map_data('world') %>%
@@ -118,8 +67,79 @@ WorldData <-
   fortify() %>%
   as_tibble()
 
-plt.dur <- ggplot(mapping = aes(long, lat, fill = mu.clipped)) +
-  facet_wrap(Year ~ ., ncol = 3) +
+# new data for predictions
+pred.dur <- function(cont = c('na', 'eura'), grid.width = 100) {
+  
+  if(cont == 'na') {
+    d <- ice.na
+    m <- gam.dur.na
+  } else if(cont == 'eura') {
+    d <- ice.eura
+    m <- gam.dur.eura
+  } else {
+    stop('Please choose a continent, "na", or "eura"')
+  }
+  
+  newd.dur <- expand.grid(Year = years,
+                          long = seq(min(d$long) - 5,
+                                     max(d$long) + 5,
+                                     length.out = grid.width),
+                          lat = seq(min(d$lat) - 5,
+                                    max(d$lat) + 5,
+                                    length.out = grid.width),
+                          lake = 'NA')
+  
+  # predict w/o random effects
+  pred.dur <- predict(m, newdata = newd.dur,
+                      terms = c('s(Year)', 's(long,lat)',
+                                'ti(Year,lat,long)',
+                                's.1(Year)', 's.1(long,lat)',
+                                's.2(Year)', 's.2(long,lat)'),
+                      se.fit = TRUE)
+  pred.dur <- as.data.frame(pred.dur) %>% as_tibble()
+  pred.dur <- mutate(pred.dur,
+                     mu = exp(fit.1),                                    # map to response scale
+                     lwr = exp(fit.1 - se.fit.1 * qnorm((1 + .89) / 2)), # lower 89% CI
+                     upr = exp(fit.1 + se.fit.1 * qnorm((1 + .89) / 2))) # upper 89% CI
+  
+  pred.dur <- bind_cols(pred.dur, newd.dur) # bind pred + newd
+  
+  # prevent predictions from being too far from the data
+  pred.dur <- mutate(pred.dur,
+                     mu = if_else(mu < 366, mu, 366),
+                     too.far = exclude.too.far(long, lat, d$long, d$lat, .15),
+                     lwr.clipped = if_else(too.far, NA_real_, lwr),
+                     mu.clipped = if_else(too.far, NA_real_, mu),
+                     upr.clipped = if_else(too.far, NA_real_, upr))
+}
+
+pred.dur.na <- pred.dur('na')
+pred.dur.eura <- pred.dur('eura')
+
+pred.dur.na <-
+  select(pred.dur.na, Year, long, lat, lwr.clipped, mu.clipped, upr.clipped) %>%
+  pivot_longer(cols = c('lwr.clipped', 'mu.clipped', 'upr.clipped'),
+               names_to = 'stat', values_to = 'value') %>%
+  mutate(value = if_else(value < 366, value, 366),
+         stat = case_when(stat == 'lwr.clipped' ~ 'Lower',
+                          stat == 'mu.clipped' ~ 'Estimate',
+                          stat == 'upr.clipped' ~ 'Upper'),
+         stat = factor(stat, levels = c('Lower', 'Estimate', 'Upper')))
+
+pred.dur.eura <- 
+  pred.dur.eura %>%
+  select(Year, long, lat, lwr.clipped, mu.clipped, upr.clipped) %>%
+  pivot_longer(cols = c('lwr.clipped', 'mu.clipped', 'upr.clipped'),
+               names_to = 'stat', values_to = 'value') %>%
+  mutate(value = if_else(value < 366, value, 366),
+         stat = case_when(stat == 'lwr.clipped' ~ 'Lower',
+                          stat == 'mu.clipped' ~ 'Estimate',
+                          stat == 'upr.clipped' ~ 'Upper'),
+         stat = factor(stat, levels = c('Lower', 'Estimate', 'Upper')))
+
+plt.dur <- 
+  ggplot(mapping = aes(long, lat, fill = value)) +
+  facet_grid(stat ~ Year) +
   geom_tile(data = pred.dur.na) +
   geom_tile(data = pred.dur.eura) +
   geom_map(aes(map_id = region), WorldData, map = WorldData, fill = 'transparent',
@@ -128,11 +148,11 @@ plt.dur <- ggplot(mapping = aes(long, lat, fill = mu.clipped)) +
   labs(x = NULL, y = NULL) +
   scale_x_continuous(breaks = NULL) +
   scale_y_continuous(breaks = NULL) +
-  scale_fill_viridis_c('Average duration of ice cover (days)', option = 'B', direction = -1,
-                       na.value = 'transparent') +
+  scale_fill_viridis_c('Average duration of ice cover (days)', option = 'B',
+                       direction = -1, na.value = 'transparent', limits = c(0, 366)) +
   theme(legend.position = 'bottom', text = element_text(size = 56),
-        legend.key.width = unit(5, 'cm'), legend.key.height = unit(1, 'cm'))
-#ggsave('plots/duration.pdf', plt.dur, height = 32, width = 32)
+        legend.key.width = unit(5, 'cm'), legend.key.height = unit(2, 'cm'))
+#ggsave('plots/duration.pdf', plt.dur, height = 18, width = 32)
 
 # average change between 1950 and 2010
 filter(pred.dur.na, Year %in% c(1950, 2010)) %>%
@@ -173,7 +193,9 @@ pred.dur.kallavesi <- bind_cols(pred.dur.kallavesi,
                                 as.data.frame(predict(gam.dur.eura, newdata = pred.dur.kallavesi,
                                                       se.fit = TRUE))) %>%
   mutate(fit = fit.1, se.fit = se.fit.1,
-         mu = exp(fit), lwr = exp(fit - 1.96 * se.fit), upr = exp(fit + 1.96 * se.fit))
+         mu = exp(fit),
+         lwr = exp(fit - qnorm((1 - .89) / 2) * se.fit),
+         upr = exp(fit + qnorm((1 - .89) / 2) * se.fit))
 
 ggplot() +
   #geom_point(aes(Year, duration), ice.eura, alpha = .025, na.rm = TRUE) +
@@ -193,7 +215,9 @@ pred.dur.stech <- bind_cols(pred.dur.stech,
                             as.data.frame(predict(gam.dur.eura, newdata = pred.dur.stech,
                                                   se.fit = TRUE))) %>%
   mutate(fit = fit.1, se.fit = se.fit.1,
-         mu = exp(fit), lwr = exp(fit - 1.96 * se.fit), upr = exp(fit + 1.96 * se.fit))
+         mu = exp(fit),
+         lwr = exp(fit - qnorm((1 - .89) / 2) * se.fit),
+         upr = exp(fit + qnorm((1 - .89) / 2) * se.fit))
 
 ggplot() +
   geom_point(aes(Year, duration), ice.eura, alpha = .025, na.rm = TRUE) +

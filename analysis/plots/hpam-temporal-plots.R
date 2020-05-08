@@ -35,6 +35,13 @@ sept.lab <- expression(Days~after~September~30^{th})
 # change ggplot theme
 theme_set(theme_bw())
 
+# import models ####
+# PAMs for freeze and thaw
+pam.freeze.na <- read_rds('analysis/models/pam-freeze-na4.rds')
+pam.freeze.eura <- read_rds('analysis/models/pam-freeze-eura4.rds')
+pam.thaw.na <- read_rds('analysis/models/pam-thaw-na4.rds')
+pam.thaw.eura <- read_rds('analysis/models/pam-thaw-eura4.rds')
+
 # import predictions ####
 pred.freeze.eura <- read_rds('analysis/plots/predictions/pred-freeze-eura.rds')
 pred.freeze.na <- read_rds('analysis/plots/predictions/pred-freeze-na.rds')
