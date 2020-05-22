@@ -68,7 +68,7 @@ WorldData <-
   as_tibble()
 
 # new data for predictions
-pred.dur <- function(cont = c('na', 'eura'), grid.width = 100) {
+pred.dur <- function(cont = c('na', 'eura'), grid.width = 50) {
   
   if(cont == 'na') {
     d <- ice.na
@@ -80,66 +80,69 @@ pred.dur <- function(cont = c('na', 'eura'), grid.width = 100) {
     stop('Please choose a continent, "na", or "eura"')
   }
   
-  newd.dur <- expand.grid(Year = years,
+  newd <- expand.grid(Year = years,
                           long = seq(min(d$long) - 5,
                                      max(d$long) + 5,
                                      length.out = grid.width),
                           lat = seq(min(d$lat) - 5,
                                     max(d$lat) + 5,
                                     length.out = grid.width),
-                          lake = 'NA')
+                          lake = 'NA') %>%
+    filter(! (exclude.too.far(long, lat, d$long, d$lat, .15)))
   
   # predict w/o random effects
-  pred.dur <- predict(m, newdata = newd.dur,
+  pred <- predict(m, newdata = newd,
                       terms = c('s(Year)', 's(long,lat)',
                                 'ti(Year,lat,long)',
                                 's.1(Year)', 's.1(long,lat)',
                                 's.2(Year)', 's.2(long,lat)'),
                       se.fit = TRUE)
-  pred.dur <- as.data.frame(pred.dur) %>% as_tibble()
-  pred.dur <- mutate(pred.dur,
+  pred <- as.data.frame(pred) %>% as_tibble()
+  pred <- mutate(pred,
                      mu = exp(fit.1),                                    # map to response scale
                      lwr = exp(fit.1 - se.fit.1 * qnorm((1 + .89) / 2)), # lower 89% CI
                      upr = exp(fit.1 + se.fit.1 * qnorm((1 + .89) / 2))) # upper 89% CI
   
-  pred.dur <- bind_cols(pred.dur, newd.dur) # bind pred + newd
+  pred <- bind_cols(pred, newd) # bind pred + newd
   
   # prevent predictions from being too far from the data
-  pred.dur <- mutate(pred.dur,
+  pred <- mutate(pred,
+                     lwr = if_else(mu < 366, mu, 366),
                      mu = if_else(mu < 366, mu, 366),
-                     too.far = exclude.too.far(long, lat, d$long, d$lat, .15),
-                     lwr.clipped = if_else(too.far, NA_real_, lwr),
-                     mu.clipped = if_else(too.far, NA_real_, mu),
-                     upr.clipped = if_else(too.far, NA_real_, upr))
+                     upr = if_else(mu < 366, mu, 366))
+  pred
 }
 
 pred.dur.na <- pred.dur('na')
 pred.dur.eura <- pred.dur('eura')
 
 pred.dur.na <-
-  select(pred.dur.na, Year, long, lat, lwr.clipped, mu.clipped, upr.clipped) %>%
-  pivot_longer(cols = c('lwr.clipped', 'mu.clipped', 'upr.clipped'),
+  select(pred.dur.na, Year, long, lat, lwr, mu, upr) %>%
+  pivot_longer(cols = c('lwr', 'mu', 'upr'),
                names_to = 'stat', values_to = 'value') %>%
   mutate(value = if_else(value < 366, value, 366),
-         stat = case_when(stat == 'lwr.clipped' ~ 'Lower',
-                          stat == 'mu.clipped' ~ 'Estimate',
-                          stat == 'upr.clipped' ~ 'Upper'),
+         stat = case_when(stat == 'lwr' ~ 'Lower',
+                          stat == 'mu' ~ 'Estimate',
+                          stat == 'upr' ~ 'Upper'),
          stat = factor(stat, levels = c('Lower', 'Estimate', 'Upper')))
 
 pred.dur.eura <- 
   pred.dur.eura %>%
-  select(Year, long, lat, lwr.clipped, mu.clipped, upr.clipped) %>%
-  pivot_longer(cols = c('lwr.clipped', 'mu.clipped', 'upr.clipped'),
+  select(Year, long, lat, lwr, mu, upr) %>%
+  pivot_longer(cols = c('lwr', 'mu', 'upr'),
                names_to = 'stat', values_to = 'value') %>%
   mutate(value = if_else(value < 366, value, 366),
-         stat = case_when(stat == 'lwr.clipped' ~ 'Lower',
-                          stat == 'mu.clipped' ~ 'Estimate',
-                          stat == 'upr.clipped' ~ 'Upper'),
+         stat = case_when(stat == 'lwr' ~ 'Lower',
+                          stat == 'mu' ~ 'Estimate',
+                          stat == 'upr' ~ 'Upper'),
          stat = factor(stat, levels = c('Lower', 'Estimate', 'Upper')))
 
+# duration by Year
 plt.dur <- 
   ggplot(mapping = aes(long, lat, fill = value)) +
   facet_grid(stat ~ Year) +
+  geom_map(map = WorldData, aes(map_id = region), WorldData,
+           fill = 'grey40', color = 'transparent') +
   geom_tile(data = pred.dur.na) +
   geom_tile(data = pred.dur.eura) +
   geom_map(aes(map_id = region), WorldData, map = WorldData, fill = 'transparent',
@@ -153,6 +156,38 @@ plt.dur <-
   theme(legend.position = 'bottom', text = element_text(size = 56),
         legend.key.width = unit(5, 'cm'), legend.key.height = unit(2, 'cm'))
 #ggsave('plots/duration.pdf', plt.dur, height = 18, width = 32)
+
+# change in duration between 1950 and 2010
+pred.dur.diff <- 
+  bind_rows(mutate(pred.dur.na, continent = 'na'),
+            mutate(pred.dur.eura, continent = 'eura')) %>%
+  filter(Year %in% c(1950, 2010)) %>%
+  pivot_wider(names_from = c(stat, Year), values_from = value) %>%
+  transmute(long = long,
+            lat = lat,
+            continent = continent,
+            Lower = Lower_2010 - Lower_1950,
+            Estimate = Estimate_2010 - Estimate_1950,
+            Upper = Upper_2010 - Upper_1950) %>%
+  pivot_longer(cols = c(Lower, Estimate, Upper),
+               names_to = 'stat', values_to = 'value')
+
+plt.dur.diff <- 
+  ggplot(mapping = aes(long, lat, fill = value)) +
+  geom_map(map = WorldData, aes(map_id = region), WorldData,
+           fill = 'grey40', color = 'transparent') +
+  geom_tile(data = filter(pred.dur.diff, continent == 'na')) +
+  geom_tile(data = filter(pred.dur.diff, continent == 'eura')) +
+  geom_map(aes(map_id = region), WorldData, map = WorldData, fill = 'transparent',
+           color = 'grey', inherit.aes = FALSE) +
+  coord_map('azequidistant', xlim = c(-180, 180), ylim = c(30, 90)) +
+  labs(x = NULL, y = NULL) +
+  scale_x_continuous(breaks = NULL) +
+  scale_y_continuous(breaks = NULL) +
+  scale_fill_distiller('Change in average duration of ice cover (days)',
+                       type = 'div', palette = 5, limits = c(-180, 180),
+                       direction = 1) +
+  theme(legend.position = 'bottom')
 
 # average change between 1950 and 2010
 filter(pred.dur.na, Year %in% c(1950, 2010)) %>%

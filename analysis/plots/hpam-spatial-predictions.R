@@ -1,15 +1,12 @@
 # setup ####
-# install packages if necessary:
-#devtools::install_github('adibender/pammtools')
-#install.packages('package-name')
-
 # data accessing
 library('here')      # for easier directory referencing, conflicts with lubridate::here
 library('readr')     # to read in files as tibbles
 
 # data processing
-library('dplyr')     # makes data editing easier
-library('tibble')    # a tibble is a fancy data.frame
+library('dplyr')     # for easier data wrangling
+library('tidyr')     # for easier data wrangling
+library('tibble')    # for fancy dataframes
 library('lubridate') # makes working with dates smoother
 
 # model fitting
@@ -17,9 +14,9 @@ library('pammtools') # tools for Piecewise-exponential Additive Mixed Models
 library('mgcv')      # to fit GAMs
 
 # graphics
-library('ggplot2')   # fancy plots
-library('cowplot')   # ggplot in grids
-library('gratia')    # pretty GAM plots
+library('ggplot2')   # for fancy plots
+library('cowplot')   # for ggplots in grids
+library('gratia')    # for pretty GAM plots
 
 # Import data ####
 # read in data
@@ -53,72 +50,64 @@ pam.freeze.eura <- read_rds(here::here('analysis/models/pam-freeze-eura4.rds'))
 pam.thaw.na <- read_rds(here::here('analysis/models/pam-thaw-na4.rds'))
 pam.thaw.eura <- read_rds(here::here('analysis/models/pam-thaw-eura4.rds'))
 
-# make new data for predictions (fine scale) ####
-# find ranges of data
-ranges <- expand.grid(event = c('freeze', 'thaw'), cont = c('na', 'eura')) %>%
-  mutate(min.long = sapply(paste0(event, '.', cont),
-                           function(x) floor(min(filter(get(x), Year == 2005)$long))),
-         max.long = sapply(paste0(event, '.', cont),
-                           function(x) ceiling(max(filter(get(x), Year == 2005,
-                                                          long < 60)$long))),
-         min.lat = sapply(paste0(event, '.', cont),
-                          function(x) floor(min(filter(get(x), Year == 2005)$lat))),
-         max.lat = sapply(paste0(event, '.', cont),
-                          function(x) ceiling(max(filter(get(x), Year == 2005)$lat)))) %>%
-  mutate(long = paste0('[', min.long, ', ', max.long, ']'),
-         lat = paste0('[', min.lat, ', ', max.lat, ']'))
+# make new data for predictions ####
+years <- seq(1950, 2010, by = 10)
 
-# spatial freezing data
-mk.newd <- function(d, coord, dist = 0.15, max.y = 2005) {
-  long0 <- c(coord$min.long, coord$max.long)
-  lat0 <- c(coord$min.lat, coord$max.lat)
-  
-  newd <- make_newdata(d,
+# function to make predictions and save them
+pred.save <- function(d, model, file.name = NULL, n.spatial = 30, dist = 0.2,
+                      years = years) {
+  # make new data
+  pred <- make_newdata(d,
+                       Year = years,
                        tend = unique(tend),
-                       Year = c(1950, max.y),
-                       long = seq_range(long0, by = 0.5),
-                       lat = seq_range(lat0, by = 0.5))
+                       long = seq(min(d$long) - 5,
+                                  max(d$long) + 5,
+                                  length.out = n.spatial),
+                       lat = seq(min(d$lat) - 5,
+                                 max(d$lat) + 5,
+                                 length.out = n.spatial),
+                       lake = c('NA')) %>%
+    
+    # filter to avoid extrapolating too far
+    filter(! exclude.too.far(long, lat, d$long, d$lat, dist))
   
-  rbind(mutate(filter(newd, Year == 1950),
-               too.far = exclude.too.far(filter(newd, Year == 1950)$long,
-                                         filter(newd, Year == 1950)$lat,
-                                         filter(d, Year == max.y)$long,
-                                         filter(d, Year == max.y)$lat,
-                                         dist)),
-        mutate(filter(newd, Year == max.y),
-               too.far = exclude.too.far(filter(newd, Year == max.y)$long,
-                                         filter(newd, Year == max.y)$lat,
-                                         filter(d, Year == max.y)$long,
-                                         filter(d, Year == max.y)$lat,
-                                         dist))) %>%
-    filter(!too.far) %>%
-    group_by(Year, long, lat)
-}
-
-pred <- function(newd, model) {
-  add_surv_prob(newd, object = model, ci = TRUE,
-                terms = c('s(tend)', 's(Year)', 's(long,lat)',
-                          'ti(tend,Year)', 'ti(tend,long,lat)',
-                          'ti(Year,long,lat)')) %>%
-    mutate(p = 1 - surv_prob) %>%
-    select(Year, tend, long, lat, p) %>%
-    filter(abs(p - .5) == min(abs(p - .5))) %>%
+  # group to estimate hazard for every year and at every location
+  pred <- group_by(pred, Year, long, lat)
+  
+  # make predictions
+  pred <- add_surv_prob(pred,
+                        object = model,
+                        ci = TRUE,
+                        se_mult = qnorm(0.945), # 89% CIs
+                        terms = c('s(tend)', 's(Year)', 's(long,lat)',
+                                  'ti(tend,Year)', 'ti(tend,long,lat)',
+                                  'ti(Year,long,lat)'))
+  
+  # filter to days with cumulative probability closest to 0.5 (i.e. expected occurrece date)
+  pred <- mutate(pred,
+                 p = 1 - surv_prob,
+                 lwr = 1 - surv_lower,
+                 upr = 1 - surv_upper) %>%
+    select(Year, tend, long, lat, p, lwr, upr) %>%
+    pivot_longer(c('p', 'lwr', 'upr'), names_to = 'stat', values_to = 'value') %>%
+    group_by(Year, long, lat, stat) %>%
+    filter(abs(value - .5) == min(abs(value - .5))) %>%
     filter(!duplicated(paste(Year, long, lat)))
+  
+  # save the predictions
+  if(is.null(file.name)) {
+    pred
+  } else {
+    saveRDS(pred, paste0(file.name, '-spatial-predictions.rds'))
+  }
 }
 
-newd.na.f <- mk.newd(freeze.na, filter(ranges, cont == 'na', event == 'freeze'), dist = 1)
-newd.eura.f <- mk.newd(freeze.eura, filter(ranges, cont == 'eura', event == 'freeze'), dist = 1)
-newd.na.t <- mk.newd(thaw.na,  filter(ranges, cont == 'na', event == 'thaw'), dist = 1)
-newd.eura.t <- mk.newd(thaw.eura,  filter(ranges, cont == 'eura', event == 'thaw'), dist = 1)
-
-pred.na.f <- pred(newd.na.f, pam.freeze.na)
-pred.eura.f <- pred(newd.eura.f, pam.freeze.eura)
-pred.na.t <- pred(newd.na.t, pam.thaw.na)
-pred.eura.t <- pred(newd.eura.t, pam.thaw.eura)
-
-# save the predictions
-saveRDS(list(pred.na.f = pred.na.f,
-             pred.eura.f = pred.eura.f,
-             pred.na.t = pred.na.t,
-             pred.eura.t = pred.eura.t),
-        'list-of-hpam-predictions.rds')
+# predict and save
+pred.na.f <- pred.save(freeze.na, pam.freeze.na, 'pam-freeze-na')
+pred.eura.f <- pred.save(freeze.eura, pam.freeze.eura, 'pam-freeze-eura')
+pred.na.t.1 <- pred.save(thaw.na, pam.thaw.na, years = years[1:3]) # too big for one run
+pred.na.t.2 <- pred.save(thaw.na, pam.thaw.na, years = years[4:5])
+pred.na.t.3 <- pred.save(thaw.na, pam.thaw.na, years = years[6:7])
+pred.na.t <- saveRDS(rbind(pred.na.t.1, pred.na.t.2, pred.na.t.3),
+                     'pam-thaw-na-spatial-predictions.rds')
+pred.eura.t <- pred.save(thaw.eura, pam.thaw.eura, 'pam-thaw-eura')

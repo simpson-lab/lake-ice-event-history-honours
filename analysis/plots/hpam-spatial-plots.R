@@ -8,7 +8,8 @@ library('here')      # for easier directory referencing, conflicts with lubridat
 library('readr')     # to read in files as tibbles
 
 # data processing
-library('dplyr')     # makes data editing easier
+library('dplyr')     # makes data wrangling easier
+library('tidyr')     # makes data wrangling easier
 library('tibble')    # a tibble is a fancy data.frame
 library('lubridate') # makes working with dates smoother
 
@@ -67,61 +68,56 @@ WorldData <-
   fortify() %>%
   as_tibble()
 
-# function to clip predictions
-clip.pred <- function(pred, d, dist, max.y = 2005) {
-  rbind(mutate(filter(pred, Year == 1950),
-               too.far = exclude.too.far(filter(pred, Year == 1950)$long,
-                                         filter(pred, Year == 1950)$lat,
-                                         filter(d, Year == max.y)$long,
-                                         filter(d, Year == max.y)$lat,
-                                         dist)),
-        mutate(filter(pred, Year == max.y),
-               too.far = exclude.too.far(filter(pred, Year == max.y)$long,
-                                         filter(pred, Year == max.y)$lat,
-                                         filter(d, Year == max.y)$long,
-                                         filter(d, Year == max.y)$lat,
-                                         dist))) %>%
-    filter(!too.far)
+# import predictions
+organize.dates <- function(pred, d, dist = 0.15) {
+  ungroup(pred) %>%
+    mutate(stat = case_when(stat == 'lwr' ~ 'Lower',
+                            stat == 'p' ~ 'Estimate',
+                            stat == 'upr' ~ 'Upper'),
+           stat = factor(stat, levels = c('Lower', 'Estimate', 'Upper'))) %>%
+    
+    # filter to avoid extrapolating too far
+    filter(! exclude.too.far(long, lat, d$long, d$lat, dist))
+  
 }
 
-# import predictions 
-preds <- read_rds('analysis/plots/predictions/list-of-hpam-predictions.rds')
-na.f <- preds$pred.na.f %>% ungroup() %>% clip.pred(freeze.na, .5)
-eura.f <- preds$pred.eura.f %>% ungroup() %>% clip.pred(freeze.eura, .5)
-na.t <- preds$pred.na.t %>% ungroup() %>% clip.pred(thaw.na, .5)
-eura.t <- preds$pred.eura.t %>% ungroup() %>% clip.pred(thaw.eura, .5)
-rm(preds)
+na.f <-
+  read_rds('analysis/plots/predictions/pam-freeze-na-spatial-predictions.rds') %>%
+  organize.dates(freeze.na, 0.15)
+eura.f <-
+  read_rds('analysis/plots/predictions/pam-freeze-eura-spatial-predictions.rds') %>%
+  organize.dates(freeze.eura, 0.15)
+na.t <-
+  read_rds('analysis/plots/predictions/pam-thaw-na-spatial-predictions.rds') %>%
+  organize.dates(thaw.na, 0.15)
+eura.t <-
+  read_rds('analysis/plots/predictions/pam-thaw-eura-spatial-predictions.rds') %>%
+  organize.dates(thaw.eura, 0.15)
 
+# check if values are close to 0.5
 layout(matrix(1:4, ncol = 2))
-hist(na.f$p)
-hist(eura.f$p)
-hist(na.t$p)
-hist(eura.t$p)
+hist(na.f$value)
+hist(eura.f$value)
+hist(na.t$value)
+hist(eura.t$value)
+layout(1)
+
+# check if estimated days are extreme
+layout(matrix(1:4, ncol = 2))
+hist(na.f$tend)
+hist(eura.f$tend)
+hist(na.t$tend)
+hist(eura.t$tend)
 layout(1)
 
 # Spatio-temporal plots ####
 # freeze dates
-plt.f.na <-
+plt.f <-
   ggplot(WorldData) +
-  facet_wrap(Year ~ ., ncol = 1) +
+  facet_grid(stat ~ Year) +
   geom_map(map = WorldData, aes(group = group, map_id = region),
            fill = 'grey40', color = 'transparent') +
   geom_tile(aes(long, lat, fill = tend), na.f) +
-  geom_map(map = WorldData, aes(group = group, map_id = region),
-           fill = 'transparent', color = 'grey') +
-  coord_map('azequidistant') +
-  labs(x = NULL, y = NULL) +
-  scale_x_continuous(breaks = NULL, expand = c(.2, 0)) +
-  scale_y_continuous(breaks = NULL, expand = c(.2, 0)) +
-  scale_fill_viridis_c(expression(atop(Mean~freezing~date,(days~after~June~30^{th}))),
-                       option = 'B', direction = -1, values = ) +
-  theme(legend.position = 'bottom')
-
-plt.f.eura <-
-  ggplot(WorldData) +
-  facet_wrap(Year ~ ., ncol = 2) +
-  geom_map(map = WorldData, aes(group = group, map_id = region),
-           fill = 'grey40', color = 'transparent') +
   geom_tile(aes(long, lat, fill = tend), eura.f) +
   geom_map(map = WorldData, aes(group = group, map_id = region),
            fill = 'transparent', color = 'grey') +
@@ -131,15 +127,17 @@ plt.f.eura <-
   scale_y_continuous(breaks = NULL, expand = c(.2, 0)) +
   scale_fill_viridis_c(expression(atop(Mean~freezing~date,(days~after~June~30^{th}))),
                        option = 'B', direction = -1) +
-  theme(legend.position = 'bottom')
+  theme(legend.position = 'bottom', text = element_text(size = 56),
+        legend.key.width = unit(5, 'cm'), legend.key.height = unit(2, 'cm'))
 
 # thaw dates
-plt.t.na <-
+plt.t <-
   ggplot(WorldData) +
-  facet_wrap(Year ~ ., ncol = 1) +
+  facet_grid(stat ~ Year) +
   geom_map(map = WorldData, aes(group = group, map_id = region),
            fill = 'grey40', color = 'transparent') +
   geom_tile(aes(long, lat, fill = tend), na.t) +
+  geom_tile(aes(long, lat, fill = tend), eura.t) +
   geom_map(map = WorldData, aes(group = group, map_id = region),
            fill = 'transparent', color = 'grey') +
   coord_map('azequidistant') +
@@ -147,28 +145,61 @@ plt.t.na <-
   scale_x_continuous(breaks = NULL, expand = c(.1, 0)) +
   scale_y_continuous(breaks = NULL, expand = c(.1, 0)) +
   scale_fill_viridis_c(expression(atop(Mean~thawing~date,(days~after~Sept.~30^{th}))),
-                       option = 'B', direction = -1, values = ) +
-  theme(legend.position = 'bottom')
+                       option = 'B', direction = -1) +
+  theme(legend.position = 'bottom', text = element_text(size = 56),
+        legend.key.width = unit(5, 'cm'), legend.key.height = unit(2, 'cm'))
 
-plt.t.eura <-
+#save.plt(plt.f, dir = 'hpam-spatial-freeze.pdf', width = 32, height = 18)
+#save.plt(plt.t, dir = 'hpam-spatial-thaw.pdf', width = 32, height = 18)
+
+# change 1950-2010
+diff.dates <- function(d) {
+  d %>%
+    select(long, lat, stat, Year, tend) %>%
+    mutate(Year = paste0('y.', Year)) %>%
+    pivot_wider(names_from = Year, values_from = tend) %>%
+    mutate(diff = y.2010 - y.1950)
+}
+
+na.f.diff <- diff.dates(na.f)
+eura.f.diff <- diff.dates(eura.f)
+na.t.diff <- diff.dates(na.t)
+eura.t.diff <- diff.dates(eura.t)
+
+plt.change.f <- 
   ggplot(WorldData) +
-  facet_wrap(Year ~ ., ncol = 2) +
+  facet_wrap(stat ~ ., ncol = 1) +
   geom_map(map = WorldData, aes(group = group, map_id = region),
            fill = 'grey40', color = 'transparent') +
-  geom_tile(aes(long, lat, fill = tend), eura.t) +
+  geom_tile(aes(long, lat, fill = diff), na.f.diff) +
+  geom_tile(aes(long, lat, fill = diff), eura.f.diff) +
   geom_map(map = WorldData, aes(group = group, map_id = region),
            fill = 'transparent', color = 'grey') +
   coord_map('azequidistant') +
   labs(x = NULL, y = NULL) +
   scale_x_continuous(breaks = NULL, expand = c(.2, 0)) +
   scale_y_continuous(breaks = NULL, expand = c(.2, 0)) +
-  scale_fill_viridis_c(expression(atop(Mean~thawing~date,(days~after~Sept.~30^{th}))),
-                       option = 'B', direction = -1) +
-  theme(legend.position = 'bottom')
+  scale_fill_distiller(expression(atop('Change in expected', 'freeze date (days)')),
+                       type = 'div', palette = 5, limits = c(-200, 200)) +
+  theme(legend.position = 'right')
 
-plt.na <- plot_grid(plt.f.na, plt.t.na, labels = c('a.', 'b.'), ncol = 1)
-plt.eura <- plot_grid(plt.f.eura, plt.t.eura, labels = c('a.', 'b.'), ncol = 1,
-                      axis = 'r')
+plt.change.t <-
+  ggplot(WorldData) +
+  facet_wrap(stat ~ ., ncol = 1) +
+  geom_map(map = WorldData, aes(group = group, map_id = region),
+           fill = 'grey40', color = 'transparent') +
+  geom_tile(aes(long, lat, fill = diff), na.t.diff) +
+  geom_tile(aes(long, lat, fill = diff), eura.t.diff) +
+  geom_map(map = WorldData, aes(group = group, map_id = region),
+           fill = 'transparent', color = 'grey') +
+  coord_map('azequidistant') +
+  labs(x = NULL, y = NULL) +
+  scale_x_continuous(breaks = NULL, expand = c(.2, 0)) +
+  scale_y_continuous(breaks = NULL, expand = c(.2, 0)) +
+  scale_fill_distiller(expression(atop('Change in expected', 'thaw date (days)')),
+                       type = 'div', palette = 5, limits = c(-110, 110),
+                       direction = 1) +
+  theme(legend.position = 'right')
 
-#save.plt(plt.na, dir = 'hpam-great-lakes.pdf', width = 6, height = 8)
-#save.plt(plt.eura, dir = 'hpam-scandinavia.pdf', width = 5.5, height = 8)
+plt.diff <- plot_grid(plt.change.f, plt.change.t, labels = c('a.', 'b.'))
+#save.plt(plt.diff, dir = 'hpam-change-in-dates.pdf', width = 10, height = 9)
