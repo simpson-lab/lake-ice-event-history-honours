@@ -16,6 +16,9 @@ d <- tibble(log.hazard = seq(-3, 1.5, length.out = 5e4),
 # values when p = 0.5
 filter(d, round(p, 4) == .5)
 
+# values when p = 0.99
+filter(d, round(p, 5) == .99)
+
 # plotting function
 plt.fun <- function(x) {
   d$x <- d[[x]]
