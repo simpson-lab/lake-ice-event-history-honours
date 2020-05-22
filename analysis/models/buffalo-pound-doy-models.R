@@ -50,6 +50,9 @@ bp.ice.weekly$doy.jul <- post.ref.date('date', bp.ice.weekly, event = 'freeze')
 # yearly format
 bp.ice <-
   read_csv(here::here('data', 'bp-weekly-data.csv'), guess_max = 1900) %>%
+  group_by(year) %>%
+  slice(1) %>%
+  ungroup() %>%
   transmute(Year = year,
             temp = temp,
             on.week = iceonweek,
