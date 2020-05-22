@@ -1,30 +1,23 @@
 # setup ####
-# install if necessary
-#install.packages('adibender/pammtools')
-
 # data accessing
-library('here')      # for easier directory referencing, conflicts w/ lubridate::here
+library('here')      # for easier directory referencing
 library('readr')     # to read in files as tibbles
 
 # data editing
 library('dplyr')     # makes data editing easier
 library('tibble')    # a tibble is a fancy data.frame
 library('lubridate') # makes dealing with dates smoother
-library('tidyr')     # easier to make new data for predictions using expand_grid()
 
 # model fitting
 library('pammtools') # tools for Piecewise-exponential Additive Mixed Models
 library('mgcv')      # to fit GAMs
-library('survival')  # survival analysis functions
 
 # graphics
 library('ggplot2')   # fancy plots
-library('gganimate') # animated ggplot2 plots
 library('cowplot')   # ggplot in grids
-library('gratia')    # pretty GAM plots
 
 # source functions
-source(here::here('functions/post.ref.date.R')) # to change DOY to post Jun 30 / Sep 30
+source(here::here('functions/post.ref.date.R')) # DOY => post Jun 30 / Sep 30
 source(here::here('functions/save.plt.R'))      # to save plots easily
 
 # change ggplot theme
@@ -41,34 +34,37 @@ sept.lab <- expression(Days~after~September~30^{th})
 
 # Import and process data ####
 # read in the buffalo pound data
-################### assuming that dataset starts with lake already frozen ################################################
 # weekly format
-bp.ice.weekly <- read_csv(here::here('data', 'bp-weekly-data.csv'), guess_max = 1900) %>%
-  transmute(Year = year,                                                   # rename
-            week = week,                                                   # keep week column
-            temp = temp,                                                   # keep temp column
+bp.ice.weekly <-
+  read_csv(here::here('data', 'bp-weekly-data.csv'), guess_max = 1900) %>%
+  transmute(Year = year,                                                 # rename
+            week = week,                                                 # keep week column
+            temp = temp,                                                 # keep temp column
             date = date(paste0(Year - 1, '-12-31')) + week * 7,
-            frozen = if_else(week < iceonweek & week > iceoffweek, 0, 1),  # was BP frozen?
+            frozen = if_else(week < iceonweek & week > iceoffweek, 0, 1),# was BP frozen?
             july.year = paste0(Year - 1, '-', Year))
 
-# add a column for "number of days after June 30"
+# add a column for 'number of days after June 30'
 bp.ice.weekly$doy.jul <- post.ref.date('date', bp.ice.weekly, event = 'freeze')
 
 # yearly format
-bp.ice <- read_csv(here::here('data', 'bp-weekly-data.csv'), guess_max = 1900) %>%
+bp.ice <-
+  read_csv(here::here('data', 'bp-weekly-data.csv'), guess_max = 1900) %>%
   transmute(Year = year,
             temp = temp,
             on.week = iceonweek,
             off.week = iceoffweek,
-            on.date = as.Date(paste0(Year - 1, '-12-31')) + iceondoy,     # Dec 31 of previous year + DOY
-            off.date = as.Date(paste0(Year - 1, '-12-31')) + iceoffdoy,   # Dec 31 of previous year + DOY
-            season = paste0(Year, '-', Year + 1),                         # year starting in July, like academic year
-            duration = as.numeric(off.date - lag(on.date)),               # period of ice-cover
-            observed = 1L)                                                # always observed ("dead")
+            on.date = as.Date(paste0(Year - 1, '-12-31')) + iceondoy,   # Dec 31 of previous year + DOY
+            off.date = as.Date(paste0(Year - 1, '-12-31')) + iceoffdoy, # Dec 31 of previous year + DOY
+            season = paste0(Year, '-', Year + 1),                       # year starting in July, like academic year
+            duration = as.numeric(off.date - lag(on.date)),             # period of ice-cover
+            observed = 1L)                                              # always observed ('dead')
 
 # visualize time-to-event nature of the data
-bp.viz.jan <- ggplot(filter(bp.ice.weekly, Year %in% 1981:1989), aes(week, frozen)) +
-  geom_ribbon(aes(week, ymin = 0, ymax = frozen), alpha = 0.25, fill = pal[1]) +
+bp.viz.jan <-
+  ggplot(filter(bp.ice.weekly, Year %in% 1981:1989), aes(week, frozen)) +
+  geom_ribbon(aes(week, ymin = 0, ymax = frozen), alpha = 0.25,
+              fill = pal[1]) +
   geom_line(color = pal[1]) +
   facet_wrap(. ~ Year, ncol = 3, dir = 'h') +
   scale_y_continuous(breaks = 0:1, labels = c('No', 'Yes')) +
@@ -77,13 +73,15 @@ bp.viz.jan <- ggplot(filter(bp.ice.weekly, Year %in% 1981:1989), aes(week, froze
 # visualize time-to-event nature of the data
 bp.viz.jul <- ggplot(filter(bp.ice.weekly, Year %in% 1981:1989),
                      aes(doy.jul, frozen)) +
-  geom_ribbon(aes(doy.jul, ymin = 0, ymax = frozen), alpha = 0.25, fill = pal[1]) +
+  geom_ribbon(aes(doy.jul, ymin = 0, ymax = frozen), alpha = 0.25,
+              fill = pal[1]) +
   geom_line(color = pal[1]) +
   facet_wrap(. ~ july.year, ncol = 3, dir = 'h') +
   scale_y_continuous(breaks = 0:1, labels = c('No', 'Yes')) +
   labs(x = expression(Days~after~June~30^{th}), y = 'Frozen'); bp.viz.jul
 
-bp.viz <- plot_grid(bp.viz.jan, bp.viz.jul, ncol = 1, labels = c('a.', 'b.'), hjust = 0)
+bp.viz <- plot_grid(bp.viz.jan, bp.viz.jul, ncol = 1, labels = c('a.', 'b.'),
+                    hjust = 0)
 #save.plt(bp.viz, dir = 'bp-viz.pdf')
 
 # process data to piece-wise exponential data format
@@ -94,8 +92,10 @@ bp.ice <- bp.ice %>%
 
 # add new variables
 bp.ice <- mutate(bp.ice,
-                 on.doy.jul = post.ref.date('on.date', bp.ice, 'freeze'), # DOY of ice on post June 30
-                 off.doy.oct = post.ref.date('off.date', bp.ice, 'thaw')) # DOY of ice off post Sept 30
+                 # DOY of ice on post June 30
+                 on.doy.jul = post.ref.date('on.date', bp.ice, 'freeze'), 
+                 # DOY of ice off post Sept 30
+                 off.doy.oct = post.ref.date('off.date', bp.ice, 'thaw'))
 
 # format to Piece-wise Exponential Data (PED)
 bp.freeze <-
@@ -117,34 +117,32 @@ bp.thaw <-
                         event = observed) ~ .) # event
 
 ## column values:
-# id        : ID for "patient" (i.e. Year)
-# tstart    : first day of censored period
-# tend      : end of censored period 
-# interval  : censored period (can be more than one day)
+# id        : ID for 'patient' (i.e. Year)
+# tstart    : first day of period
+# tend      : end of period 
+# interval  : period (can be more than one day)
 # offset    : accounts for hazard within interval
 # ped_status: 1/0 = dead/alive (1 if the event was observed)
 # Year      : calendar year (e.g. 2001)
 # season    : year starting in June (e.g. 2000-2001)
 
 # Model fitting ####
-# if fit terminates with step failure just re-fit: change seed => change paths of convergence
-
 # model hazard of freezing
 pam.bp.freeze <- gam(ped_status ~
                        s(tend, bs = 'cr', k = 5) +       # effect of DOY
                        s(Year, bs = 'cr', k = 10) +      # effect of Year
                        ti(tend, Year, bs = 'cr', k = 5), # change in effect of DOY over years
                      data = bp.freeze,
-                     family = poisson('log'),             # response of Y
-                     offset = offset,                     # account for censoring
+                     family = poisson('log'),             # likelihood of Y
+                     offset = offset,
                      method = 'REML', # optimization of smoothness parameter via restricted marginal likelihood
                      control = gam.control(nthreads = 3)) # use multiple cores
 
 # model hazard of thawing
 pam.bp.thaw <- gam(ped_status ~
-                     s(tend, bs = 'cr', k = 5) +       # smooth effect of DOY ("follow-up dates") on hazard
+                     s(tend, bs = 'cr', k = 5) +       # smooth effect of DOY ('follow-up dates') on hazard
                      s(Year, bs = 'cr', k = 10) +      # smooth effect of Year on hazard
-                     ti(tend, Year, bs = 'cr', k = 5), # tensor interaction
+                     ti(tend, Year, bs = 'cr', k = 5), # change in effect of tend with Year
                    data = bp.thaw,
                    family = poisson('log'),
                    offset = offset,
@@ -156,18 +154,6 @@ gam.bp.duration <- gam(duration ~ s(Year, bs = 'cr', k = 10), # smooth effect of
                        data = bp.ice,
                        family = Gamma('log'),
                        method = 'REML')
-
-# model diagnostics
-pam.bp.freeze # make sure edf is not close to k
-pam.bp.thaw
-layout(matrix(1:4, ncol = 2))
-gam.check(gam.bp.duration)
-layout(1)
-
-# model summaries (p-values are aprroximate!)
-summary(pam.bp.freeze)
-summary(pam.bp.thaw)
-summary(gam.bp.duration)
 
 # Plots ####
 ## Freezing ----
@@ -230,8 +216,7 @@ plt.f.haz.year <- ggplot(pred.freeze.year, aes(x = tend, group = Year)) +
   scale_fill_manual('Year', values = pal); plt.f.haz.year
 
 # smooth term of year
-f.year <-
-  bp.freeze %>%
+bp.freeze %>%
   make_newdata(tend = c(150), # December 1st
                Year = seq_range(Year, n = 100)) %>%
   group_by(Year) %>%
@@ -239,7 +224,7 @@ f.year <-
   ggplot(aes(Year, hazard)) +
   geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper), fill = pal[1], alpha = .2) +
   geom_line(col = pal[1]) +
-  ylab(Hazard~of~freezing~on~December~1^{st}); f.year
+  ylab(Hazard~of~freezing~on~December~1^{st})
 
 ## Thawing ----
 # predictions grouped by year
@@ -321,14 +306,14 @@ plt.freeze <- plot_grid(plt.f.step.year + theme(legend.position = 'none') + xlab
                         plt.f.p.year + theme(legend.position = 'none'),
                         rel_heights = c(1, 1, 1.1),
                         labels = c('a.', 'c.', 'e.'), vjust = 0,
-                        ncol = 1); plt.freeze
+                        ncol = 1)
 
 plt.thaw <- plot_grid(plt.t.step.year + theme(legend.position = 'none') + xlab(NULL),
                       plt.t.haz.year + theme(legend.position = 'none') + xlab(NULL),
                       plt.t.p.year + theme(legend.position = 'none'),
                       rel_heights = c(1, 1, 1.1),
                       labels = c('b.', 'd.', 'f.'), vjust = 0,
-                      ncol = 1); plt.thaw
+                      ncol = 1)
 
 plt.bp <- plot_grid(get_legend(plt.f.p.year),
                     plot_grid(plt.freeze, plt.thaw, ncol = 2),
@@ -336,9 +321,3 @@ plt.bp <- plot_grid(get_legend(plt.f.p.year),
                     ncol = 1, rel_heights = c(.25, 3, 1), vjust = 0,
                     labels = c(NA, NA, 'g.'), scale = .95)
 #save.plt(plt.bp, dir = 'bp.pdf', height = 10, width = 8)
-
-# more functions from the pammtools package ####
-int_info(bp.thaw) %>% slice(1:10)            # internal info on intervals from a ped object
-sample_info(bp.thaw)                         # sample means for cont and mode for categorical variables
-bp.thaw %>% group_by(Year) %>% sample_info() # same as above but grouped by year (useful if 2+ lakes)
-ped_info(bp.thaw)                            # all unique intervals with covariates set to mean or mode
