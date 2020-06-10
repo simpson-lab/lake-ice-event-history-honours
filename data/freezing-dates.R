@@ -10,6 +10,9 @@ library('rgdal')     # to write kml files
 library('ggplot2')   # fancy plots
 library('cowplot')   # ggplots in grids
 library('ggmap')     # maps using ggplot
+library('geonames')  # to convert coordinates to altitude
+# set username using options(geonamesUsername = '<myusername>')
+# (note that online services must be activated first in the geonames account)
 
 theme_set(theme_bw())
 VIEW.COMMENTS <- FALSE # to prevent view() functions if sourcing file
@@ -31,8 +34,11 @@ NCC.data <- read_csv(here('data', 'LakeIceIncidencewithCharacteristics_Final.csv
 
 # updated coordinates from NCC.data (Sharma et al. 2019)
 ice <- left_join(ice,
-                 NCC.data[c('lakecode', 'lakename', 'Latitude_dd', 'Longitude_dd')]) %>% # join tables
-  mutate(long = case_when(is.na(Longitude_dd) ~ longitude, # if coord from NCC.data are NA take values from ice
+                 NCC.data %>%
+                   select(lakecode, lakename, Latitude_dd, Longitude_dd,
+                          Elevation_m)) %>%
+  # if coord from NCC.data are NA take values from ice
+  mutate(long = case_when(is.na(Longitude_dd) ~ longitude,
                           TRUE ~ Longitude_dd),
          lat = case_when(is.na(Latitude_dd) ~ latitude,
                          TRUE ~ Latitude_dd))
@@ -48,7 +54,8 @@ ice <- rename(ice,
 # lake thaws before freezing: freezing year is wrong
 if(VIEW.COMMENTS) view(filter(ice, iceoff_year == 1939, lake == 'SIMCOE'))
 ice <- mutate(ice,
-              iceon_year = if_else(iceoff_year == 1939 & ice$lake == 'SIMCOE', 1938, iceon_year))
+              iceon_year = if_else(iceoff_year == 1939 & ice$lake == 'SIMCOE',
+                                  true = 1938, false = iceon_year))
 
 # add new variables ####
 ice <- mutate(ice,
@@ -106,23 +113,49 @@ ice <- mutate(ice,
 # day of year is 'days after December 31 (of the previous year)' so for freeze and thaw events we can use
 # days after June 30 for freeze (i.e. July 1 is 1 and June 30 is 365 or 366), and
 # days after September 30 for thaw (i.e. October 1 is 1 and September 30 is 365 or 366)
-plt.ref.dates <- plot_grid(ggplot(ice, aes(On.DOY, 1)) +
-                             geom_point(alpha = .1) +
-                             geom_vline(aes(xintercept = yday('2000-06-30')), col = 'cornflowerblue', lwd = 1) +
-                             labs(title = 'Freeze dates', y = element_blank(), x = 'DOY') +
-                             scale_y_continuous(breaks = NULL),
-                           ggplot(ice, aes(Off.DOY, 1)) +
-                             geom_point(alpha = .1) +
-                             geom_vline(aes(xintercept = yday('2000-09-30')), col = 'darkorange', lwd = 1) +
-                             labs(title = 'Thaw dates', y = element_blank(), x = 'DOY') +
-                             scale_y_continuous(breaks = NULL),
-                           ncol = 1)
+plt.ref.dates <- 
+  plot_grid(ggplot(ice, aes(On.DOY, 1)) +
+              geom_point(alpha = .1) +
+              geom_vline(aes(xintercept = yday('2000-06-30')),
+                         col = 'cornflowerblue', lwd = 1) +
+              labs(title = 'Freeze dates', y = element_blank(), x = 'DOY') +
+              scale_y_continuous(breaks = NULL),
+            ggplot(ice, aes(Off.DOY, 1)) +
+              geom_point(alpha = .1) +
+              geom_vline(aes(xintercept = yday('2000-09-30')),
+                         col = 'darkorange', lwd = 1) +
+              labs(title = 'Thaw dates', y = element_blank(), x = 'DOY') +
+              scale_y_continuous(breaks = NULL),
+            ncol = 1)
 
 # check locations using GoogleMaps ####
-stations <- filter(ice[c('station', 'lake', 'long', 'lat')],
-                   !duplicated(station)) # one row per station
+stations <-
+  select(ice, station, lake, long, lat, Elevation_m) %>%
+  filter(!duplicated(station)) # one row per station
+
+# add missing elevations
+# update stations and add altitude
+stations <-
+  mutate(stations,
+         altitude = purrr::map2_dbl(lat, long,
+                                    function(a, b) {
+                                      # GNgtopo30 is more accurate than GNsrtm3? 
+                                      x <- GNgtopo30(lat = a, lng = b)
+                                      as.numeric(x$gtopo30[1])
+                                    }),
+         altitude = if_else(is.na(Elevation_m), altitude, Elevation_m))
+stations <- select(stations, -Elevation_m)
 #write_csv(stations, 'data/stations.csv')
-stations <- read_csv('data/stations.csv', col_types = 'ccnn')
+
+# some locations have very inaccurate altitudes
+filter(stations, altitude < 0)
+
+# change problematic altitudes (assuming lakes are coastal)
+stations <- mutate(stations,
+                   altitude = if_else(altitude > 0, altitude, 1))
+
+# add altitude to individual observations
+ice <- left_join(ice, select(stations, station, altitude), by = 'station')
 
 # Fix locations ####
 # did not change location if: - the pin was near the coast,
@@ -352,8 +385,8 @@ ice <- mutate(ice,
                                     TRUE ~ long))
 
 # update stations
-stations <- filter(ice[c('station', 'lake', 'long', 'lat')],
-                   !duplicated(station))
+stations <- select(ice, station, lake, long, lat, altitude) %>%
+  filter(!duplicated(station))
 
 # check if there are any distinct lakes with the same name
 if(VIEW.COMMENTS) {
@@ -416,14 +449,16 @@ if(VIEW.COMMENTS) view(ice[which(ice$Off.date < ice$On.date), ])
 sum(ice$Off.On < ice$duration, na.rm = TRUE) # nrows w duration > ice-on period
 sum(ice$Off.On < ice$duration, na.rm = TRUE) / nrow(ice) # percent
 
-hist(ice$Off.On.Duration[ice$Off.On < ice$duration], breaks = 60, xlab = 'Off - On - duration',
+hist(ice$Off.On.Duration[ice$Off.On < ice$duration], breaks = 60,
+     xlab = 'Off - On - duration',
      main = 'Number of Events with Duration > off.DOY - On.DOY')
 
 # save data ####
 # keep only necessary columns
 ice <- select(ice,
-              lake, station, Year, july.year, froze.bool, On.date, Off.date, On.DOY,
-              Off.DOY, On.DOY.jul, Off.DOY.oct, duration, country, long, lat) %>%
+              lake, station, Year, july.year, froze.bool, On.date, Off.date,
+              On.DOY, Off.DOY, On.DOY.jul, Off.DOY.oct, duration, country, long,
+              lat, altitude) %>%
   mutate(lake = factor(lake),
          station = factor(station))
 
