@@ -7,7 +7,7 @@
 library('here')      # for easier directory referencing, conflicts with lubridate::here
 library('readr')     # to read in files as tibbles
 
-# data editing
+# data wrangling
 library('dplyr')     # makes data editing easier
 library('tibble')    # a tibble is a fancy data.frame
 
@@ -49,8 +49,12 @@ ggExtra::ggMarginal(plt.obs.dens, type = 'histogram', fill = 'grey75')
 ice <- filter(ice, Year >= 1950)
 
 # Data pre-processing ####
+ice <-
+  # add continent variable
+  mutate(ice,
+         continent = if_else(long > -30, 'Eurasia', 'North America'))
+
 # split data by continent
-ice$continent <- if_else(ice$long > -30, 'Eurasia', 'North America')
 ice.na <- filter(ice, continent == 'North America')
 ice.eura <- filter(ice, continent == 'Eurasia')
 
@@ -78,11 +82,13 @@ ggplot(WorldData) +
 #                  : but the freeze date is NA =>           remove the row in the FREEZE data
 # if the lake did NOT freeze =>                             keep the row with DOY = NA
 freeze.eura <-
-  select(ice.eura, lake, station, Year, july.year, froze.bool, On.date, On.DOY, On.DOY.jul, long, lat) %>%
+  select(ice.eura, lake, station, Year, july.year, froze.bool, On.date, On.DOY,
+         On.DOY.jul, long, lat, altitude) %>%
   as_ped(formula = Surv(time = On.DOY.jul,       # follow-up time
                         event = froze.bool) ~ .) # did the lake freeze? TRUE/FALSE
 freeze.na <-
-  select(ice.na, lake, station, Year, july.year, froze.bool, On.date, On.DOY, On.DOY.jul, long, lat) %>%
+  select(ice.na, lake, station, Year, july.year, froze.bool, On.date, On.DOY,
+         On.DOY.jul, long, lat, altitude) %>%
   as_ped(formula = Surv(time = On.DOY.jul,       # follow-up time
                         event = froze.bool) ~ .) # did the lake freeze? TRUE/FALSE
 
@@ -92,12 +98,14 @@ freeze.na <-
 #                               but the day is NA =>        remove the row from the THAW data
 # if the lake froze but did not thaw =>                     keep the row with DOY as NA
 thaw.eura <-
-  select(ice.eura, lake, station, Year, july.year, froze.bool, Off.date, Off.DOY, Off.DOY.oct, long, lat) %>%
+  select(ice.eura, lake, station, Year, july.year, froze.bool, Off.date,
+         Off.DOY, Off.DOY.oct, long, lat, altitude) %>%
   as_ped(formula = Surv(time = Off.DOY.oct,                            # follow-up time
                         event = froze.bool & !is.na(Off.DOY.oct)) ~ .) # lake thawed if it froze & thaw date not NA
 
 thaw.na <-
-  select(ice.na, lake, station, Year, july.year, froze.bool, Off.date, Off.DOY, Off.DOY.oct, long, lat) %>%
+  select(ice.na, lake, station, Year, july.year, froze.bool, Off.date, Off.DOY,
+         Off.DOY.oct, long, lat, altitude) %>%
   as_ped(formula = Surv(time = Off.DOY.oct,                            # follow-up time
                         event = froze.bool & !is.na(Off.DOY.oct)) ~ .) # lake thawed if it froze & thaw date not NA
 
@@ -139,6 +147,7 @@ pam.freeze.na <- bam(ped_status ~                               # frozen? y/n
                        s(tend, lake, bs = 'fs', k = 10) +       # deviations from tend smooth
                        s(Year, lake, bs = 'fs', k = 10) +       # deviations from year smooth
                        s(long, lat, bs = 'ds', k = 20) +        # smooth effect of space (splines on sphere)
+                       s(altitude, bs = 'cr', k = 10) +         # smooth effect of altitude
                        #s(lake, bs = 're') +                    # random effect of lake
                        #s(station, bs = 're') +                 # random effect of station
                        ti(tend, Year, bs = 'cr', k = c(5, 5)) + # change in seasonal trend over the years
@@ -160,6 +169,7 @@ pam.freeze.eura <- bam(ped_status ~                                         # fr
                          s(tend, lake, bs = 'fs', k = 10) +       # deviations from tend smooth
                          s(Year, lake, bs = 'fs', k = 10) +       # deviations from year smooth
                          s(long, lat, bs = 'ds', k = 20) +               # smooth effect of space (splines on sphere)
+                         s(altitude, bs = 'cr', k = 10) +                # smooth effect of altitude
                          #s(lake, bs = 're') +                           # random effect of lake
                          #s(station, bs = 're') +                        # random effect of station
                          ti(tend, Year, bs = 'cr', k = c(5, 5)) +        # change in seasonal trend over the years
@@ -182,6 +192,7 @@ pam.thaw.na <- bam(ped_status ~                                      # frozen? y
                      s(tend, lake, bs = 'fs', k = 10) +              # deviations from tend smooth
                      s(Year, lake, bs = 'fs', k = 10) +              # deviations from year smooth
                      s(long, lat, bs = 'ds', k = 20) +               # smooth effect of space (splines on sphere)
+                     s(altitude, bs = 'cr', k = 10) +                # smooth effect of altitude
                      #s(lake, bs = 're') +                           # random effect of lake
                      #s(station, bs = 're') +                        # random effect of station
                      ti(tend, Year, bs = 'cr', k = c(5, 5)) +        # change in seasonal trend over the years
@@ -203,6 +214,7 @@ pam.thaw.eura <- bam(ped_status ~                               # frozen? y/n
                        s(tend, lake, bs = 'fs', k = 10) +       # deviations from tend smooth
                        s(Year, lake, bs = 'fs', k = 10) +       # deviations from year smooth
                        s(long, lat, bs = 'ds', k = 20) +        # smooth effect of space (splines on sphere)
+                       s(altitude, bs = 'cr', k = 10) +         # smooth effect of altitude
                        #s(lake, bs = 're') +                    # random effect of lake
                        #s(station, bs = 're') +                 # random effect of station
                        ti(tend, Year, bs = 'cr', k = c(5, 5)) + # change in seasonal trend over the years
@@ -224,6 +236,7 @@ gam.dur.na <- bam(duration ~
                     s(Year, bs = 'cr', k = 20) +            # smooth effect of year
                     s(Year, lake, bs = 'fs', k = 10) +      # deviations from global smooth
                     s(long, lat, k = 20, bs = 'ds') +       # smooth effect of space
+                    s(altitude, bs = 'cr', k = 10) +        # smooth effect of altitude
                     ti(Year, lat, long, bs = c('cr', 'ds'),
                        d = 1:2, k = c(10, 10)),             # change in s(year) over space
                   data = ice.na,
@@ -239,6 +252,7 @@ gam.dur.eura <- bam(duration ~
                       s(Year, bs = 'cr', k = 20) +            # smooth effect of year
                       s(Year, lake, bs = 'fs', k = 10) +      # deviations from global smooth
                       s(long, lat, k = 20, bs = 'ds') +       # smooth effect of space
+                      s(altitude, bs = 'cr', k = 10) +        # smooth effect of altitude
                       ti(Year, lat, long, bs = c('cr', 'ds'),
                          d = 1:2, k = c(10, 10)),             # change in s(year) over space
                     data = ice.eura,
@@ -280,17 +294,20 @@ gam.dur.na <- gam(list(duration ~
                          s(Year, bs = 'cr', k = 20) +            # smooth effect of year
                          s(Year, lake, bs = 'fs', k = 10) +      # deviations from global smooth
                          s(long, lat, k = 20, bs = 'ds') +       # smooth effect of space
+                         s(altitude, bs = 'cr', k = 10) +        # smooth effect of altitude
                          ti(Year, lat, long, bs = c('cr', 'ds'),
                             d = 1:2, k = c(10, 10)),             # change in s(year) over space
                        
                        ~ # formula for the power
                          s(Year, bs = 'cr', k = 5) +
                          s(long, lat, k = 5, bs = 'ds') +
+                         s(altitude, bs = 'cr', k = 5) +
                          s(lake, bs = 're'),
                        
                        ~ # formula for the scale
                          s(Year, bs = 'cr', k = 5) +
                          s(long, lat, k = 5, bs = 'ds') +
+                         s(altitude, bs = 'cr', k = 5) +
                          s(lake, bs = 're')),
                   data = ice.na,
                   family = twlss(), # location scale Tweedie
@@ -303,17 +320,20 @@ gam.dur.eura <- gam(list(duration ~
                            s(Year, bs = 'cr', k = 20) +            # smooth effect of year
                            s(Year, lake, bs = 'fs', k = 10) +      # deviations from global smooth
                            s(long, lat, k = 20, bs = 'ds') +       # smooth effect of space
+                           s(altitude, bs = 'cr', k = 10) +        # smooth effect of altitude
                            ti(Year, lat, long, bs = c('cr', 'ds'),
                               d = 1:2, k = c(10, 10)),             # change in s(year) over space
                          
                          ~ # formula for the power
                            s(Year, bs = 'cr', k = 5) +
                            s(long, lat, k = 5, bs = 'ds') +
+                           s(altitude, bs = 'cr', k = 5) +
                            s(lake, bs = 're'),
                          
                          ~ # formula for the scale
                            s(Year, bs = 'cr', k = 5) +
                            s(long, lat, k = 5, bs = 'ds') +
+                           s(altitude, bs = 'cr', k = 5) +
                            s(lake, bs = 're')),
                     data = ice.eura,
                     family = twlss(), # location scale Tweedie
@@ -324,7 +344,8 @@ plot(gam.dur.eura, pages = 1, scale = 0, scheme = 3, main = 'Eurasia duration tw
 ## fit a hurdle Gamma model:
 # linear change in hurdle over the years 
 hurdle.dur.eura <- brm(bf(duration ~ t2(Year, lat, long, bs = c('cr', 'ds'),
-                                        d = c(1, 2), k = c(20, 40)),
+                                        d = c(1, 2), k = c(20, 40)) +
+                            s(altitude, bs = 'cr', k = 10),
                           #s(lake, station, bs = 're'),
                           hu ~ Year),
                        family = hurdle_gamma(), # Gamma given that the lake froze
@@ -336,9 +357,10 @@ hurdle.dur.eura <- brm(bf(duration ~ t2(Year, lat, long, bs = c('cr', 'ds'),
 #saveRDS(hurdle.dur.eura, 'analysis/models/hurdle-dur-eura.rds')
 
 hurdle.dur.na <- brm(bf(duration ~ t2(Year, lat, long, bs = c('cr', 'ds'),
-                                      d = c(1, 2), k = c(20, 40)),
+                                      d = c(1, 2), k = c(20, 40)) +
+                        s(altitude, bs = 'cr', k = 10),
                         #s(lake, station, bs = 're'),
-                        hu ~ Year),
+                        hu ~ Year + s(altitude, bs = 'cr', k = 10)),
                      family = hurdle_gamma(), # Gamma given that the lake froze
                      data = ice.na,
                      chains = 4,
@@ -350,8 +372,10 @@ hurdle.dur.na <- brm(bf(duration ~ t2(Year, lat, long, bs = c('cr', 'ds'),
 # smooth spatio-temporal change in hurdle
 hurdle.dur.na <- brm(bf(duration ~ t2(Year, lat, long, bs = c('cr', 'ds'),
                                       d = c(1, 2), k = c(20, 40)) +
-                          #s(lake, station, bs = 're'),
-                          hu ~ t2(Year, lat, long, bs = c('cr', 'ds'),
+                          s(altitude, bs = 'cr', k = 10),
+                        #s(lake, station, bs = 're'),
+                          hu ~ t2(Year, lat, long, bs = c('cr', 'ds') +
+                                    s(altitude, bs = 'cr', k = 10),
                                   d = c(1, 2), k = c(10, 20))),
                      family = hurdle_gamma(), # Gamma given that the lake froze
                      data = ice.na,
