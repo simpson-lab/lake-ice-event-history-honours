@@ -36,7 +36,8 @@ NCC.data <- read_csv(here('data', 'LakeIceIncidencewithCharacteristics_Final.csv
 ice <- left_join(ice,
                  NCC.data %>%
                    select(lakecode, lakename, Latitude_dd, Longitude_dd,
-                          Elevation_m)) %>%
+                          Elevation_m),
+                 by = c('lakecode', 'lakename')) %>%
   # if coord from NCC.data are NA take values from ice
   mutate(long = case_when(is.na(Longitude_dd) ~ longitude,
                           TRUE ~ Longitude_dd),
@@ -59,12 +60,12 @@ ice <- mutate(ice,
 
 # add new variables ####
 ice <- mutate(ice,
-              # Year at the beginning of the season
-              Year = as.numeric(substr(season, 1, case_when(nchar(as.character(season)) == 7 ~ 4,
+              # year at the beginning of the season
+              year = as.numeric(substr(season, 1, case_when(nchar(as.character(season)) == 7 ~ 4,
                                                             nchar(as.character(season)) == 5 ~ 3))),
               
-              # Year starting in July, ~ like academic year
-              july.year = paste0(Year, '-', Year + 1),
+              # year starting in July, ~ like academic year
+              july.year = paste0(year, '-', year + 1),
               
               # first day of ice cover
               On.date = date(case_when(is.na(iceon_day) | is.na(iceon_month) | is.na(iceon_year) ~ NA_character_,
@@ -133,31 +134,6 @@ stations <-
   select(ice, station, lake, long, lat, Elevation_m) %>%
   filter(!duplicated(station)) # one row per station
 
-# add missing elevations
-# update stations and add altitude
-stations <-
-  mutate(stations,
-         altitude = purrr::map2_dbl(lat, long,
-                                    function(a, b) {
-                                      # GNgtopo30 is more accurate than GNsrtm3? 
-                                      x <- GNgtopo30(lat = a, lng = b)
-                                      as.numeric(x$gtopo30[1])
-                                    }),
-         altitude = if_else(is.na(Elevation_m), altitude, Elevation_m))
-stations <- select(stations, -Elevation_m)
-#write_csv(stations, 'data/stations.csv')
-
-# some locations have very inaccurate altitudes
-filter(stations, altitude < 0)
-
-# change problematic altitudes (assuming lakes are coastal)
-stations <- mutate(stations,
-                   altitude = if_else(altitude > 0, altitude, 1))
-
-# add altitude to individual observations
-ice <- left_join(ice, select(stations, station, altitude), by = 'station')
-
-# Fix locations ####
 # did not change location if: - the pin was near the coast,
 #                             - the pin was in the lake,
 #                             - the pin was 0.01 degrees near the lake,
@@ -385,8 +361,31 @@ ice <- mutate(ice,
                                     TRUE ~ long))
 
 # update stations
-stations <- select(ice, station, lake, long, lat, altitude) %>%
+stations <- select(ice, station, lake, long, lat, Elevation_m) %>%
   filter(!duplicated(station))
+
+# add missing elevations
+stations <-
+  mutate(stations,
+         altitude = purrr::map2_dbl(lat, long,
+                                    function(a, b) {
+                                      # GNgtopo30 is more accurate than GNsrtm3? 
+                                      x <- GNgtopo30(lat = a, lng = b)
+                                      as.numeric(x$gtopo30[1])
+                                    }),
+         altitude = if_else(is.na(Elevation_m), altitude, Elevation_m))
+stations <- select(stations, -Elevation_m)
+#write_csv(stations, 'data/stations.csv')
+
+# a few locations have very inaccurate altitudes
+filter(stations, altitude < 0)
+
+# change problematic altitudes (assuming lakes are coastal)
+stations <- mutate(stations,
+                   altitude = if_else(altitude > 0, altitude, 1))
+
+# add altitude to individual observations
+ice <- left_join(ice, select(stations, station, altitude), by = 'station')
 
 # check if there are any distinct lakes with the same name
 if(VIEW.COMMENTS) {
@@ -456,7 +455,7 @@ hist(ice$Off.On.Duration[ice$Off.On < ice$duration], breaks = 60,
 # save data ####
 # keep only necessary columns
 ice <- select(ice,
-              lake, station, Year, july.year, froze.bool, On.date, Off.date,
+              lake, station, year, july.year, froze.bool, On.date, Off.date,
               On.DOY, Off.DOY, On.DOY.jul, Off.DOY.oct, duration, country, long,
               lat, altitude) %>%
   mutate(lake = factor(lake),
