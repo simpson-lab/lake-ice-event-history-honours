@@ -154,7 +154,7 @@ eg <- filter(ice,                           # subset to only three lakes:
              'WASCANA LAKE' == lake |       # Wascana Lake, Canada
                'MOHANSIC' == lake |         # Mohansic Lake, United States
                station == 'ARAI1',          # Lake Suwa, Japan
-             Year %in% 1970:1979)           # subset to a single decade
+             Year %in% 1970:1974)           # subset to a single decade
 
 ggplot(eg, aes(Year, On.DOY.jul)) +
   facet_grid(. ~ lake) +
@@ -168,7 +168,7 @@ eg.freeze <-
          On.DOY.jul) %>%
   as_ped(formula = Surv(time = On.DOY.jul,           # follow-up time
                         event = froze.bool) ~ .) %>% # did the lake freeze? TRUE/FALSE
-  filter(station %in% unique(eg$station) & Year %in% 1970:1979)
+  filter(station %in% unique(eg$station) & Year %in% 1970:1974)
 
 eg.freeze <- bind_rows(eg.freeze,
                        expand_grid(id = NA, tstart = NA, tend = max(eg.freeze$tend) + 10,
@@ -188,7 +188,7 @@ eg.thaw <-
   as_ped(formula = Surv(time = Off.DOY.oct,             # follow-up time
                         event = froze.bool &
                           !is.na(Off.DOY.oct)) ~ .) %>% # lake thawed if it froze & date not NA
-  filter(station %in% unique(eg$station) & Year %in% 1970:1979)
+  filter(station %in% unique(eg$station) & Year %in% 1970:1974)
 
 eg.thaw <- bind_rows(eg.thaw,
                      expand_grid(id = NA, tstart = NA, tend = max(eg.thaw$tend) + 10,
@@ -216,4 +216,4 @@ plt.eg.thaw <- ggplot(eg.thaw, aes(tend, ped_status)) +
   labs(x = sept.lab, y = 'Thawed')
 
 plt.eg <- plot_grid(plt.eg.freeze, plt.eg.thaw, nrow = 1, labels = c('a.', 'b.'), hjust = 0)
-#save.plt(plt.eg, 'three-lake-example.pdf', width = 8, height = 6)
+#save.plt(plt.eg, 'three-lake-example.pdf', width = 8, height = 4)
