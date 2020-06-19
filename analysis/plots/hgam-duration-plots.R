@@ -46,15 +46,19 @@ plt.obs.fit <-
   plot_grid(ggplot(mapping = aes(gam.dur.na$model$duration,
                                  gam.dur.na$fitted.values[, 1])) +
               geom_hex(col = 'grey') +
-              geom_segment(aes(x = 0, y = 0, xend = 350, yend = 350), col = 'red') +
-              scale_fill_viridis_c('Number of data points', option = 'B', direction = -1) +
+              geom_segment(aes(x = 0, y = 0, xend = 350, yend = 350),
+                           col = 'red') +
+              scale_fill_viridis_c('Number of data points', option = 'B',
+                                   direction = -1) +
               theme(legend.position = 'right') +
               labs(x = 'Observed', y = 'Estimated'),
             ggplot(mapping = aes(gam.dur.eura$model$duration,
                                  gam.dur.eura$fitted.values[, 1])) +
               geom_hex(col = 'grey') +
-              geom_segment(aes(x = 0, y = 0, xend = 300, yend = 300), col = 'red') +
-              scale_fill_viridis_c('Number of data points', option = 'B', direction = -1) +
+              geom_segment(aes(x = 0, y = 0, xend = 300, yend = 300),
+                           col = 'red') +
+              scale_fill_viridis_c('Number of data points', option = 'B',
+                                   direction = -1) +
               theme(legend.position = 'right') +
               labs(x = 'Observed', y = 'Estimated'),
             labels = c('a.', 'b.'), ncol = 1)
