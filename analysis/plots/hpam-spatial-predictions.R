@@ -1,6 +1,6 @@
 # setup ####
 # data accessing
-library('here')      # for easier directory referencing, conflicts with lubridate::here
+library('here')      # for easier directory referencing
 library('readr')     # to read in files as tibbles
 
 # data processing
@@ -17,10 +17,15 @@ library('mgcv')      # to fit GAMs
 library('ggplot2')   # for fancy plots
 library('cowplot')   # for ggplots in grids
 library('gratia')    # for pretty GAM plots
+library('sp')        # for spatial objects
+library('spData')    # for map data
+library('sf')        # for simple features objects
+library('raster')    # to clip predictions to land only
 
 # Import data ####
 # read in data
 ice <- read_rds(here::here('data/lake-ice-data.rds')) %>%
+  rename(Year = year) %>%
   filter(Year >= 1950) %>%
   mutate(continent = if_else(long > -30, 'Eurasia', 'North America'))
 ice.na <- filter(ice, continent == 'North America')
@@ -28,19 +33,19 @@ ice.eura <- filter(ice, continent == 'Eurasia')
 
 # change to PED format
 freeze.na <-
-  select(ice.na, lake, station, Year, july.year, froze.bool, On.date, On.DOY, On.DOY.jul, long, lat) %>%
+  dplyr::select(ice.na, lake, station, Year, july.year, froze.bool, On.date, On.DOY, On.DOY.jul, long, lat) %>%
   as_ped(formula = Surv(time = On.DOY.jul,       # follow-up time
                         event = froze.bool) ~ .) # did the lake freeze? TRUE/FALSE
 freeze.eura <-
-  select(ice.eura, lake, station, Year, july.year, froze.bool, On.date, On.DOY, On.DOY.jul, long, lat) %>%
+  dplyr::select(ice.eura, lake, station, Year, july.year, froze.bool, On.date, On.DOY, On.DOY.jul, long, lat) %>%
   as_ped(formula = Surv(time = On.DOY.jul,       # follow-up time
                         event = froze.bool) ~ .) # did the lake freeze? TRUE/FALSE
 thaw.na <-
-  select(ice.na, lake, station, Year, july.year, froze.bool, Off.date, Off.DOY, Off.DOY.oct, long, lat) %>%
+  dplyr::select(ice.na, lake, station, Year, july.year, froze.bool, Off.date, Off.DOY, Off.DOY.oct, long, lat) %>%
   as_ped(formula = Surv(time = Off.DOY.oct,                            # follow-up time
                         event = froze.bool & !is.na(Off.DOY.oct)) ~ .) # lake thawed if it froze & thaw date not NA
 thaw.eura <-
-  select(ice.eura, lake, station, Year, july.year, froze.bool, Off.date, Off.DOY, Off.DOY.oct, long, lat) %>%
+  dplyr::select(ice.eura, lake, station, Year, july.year, froze.bool, Off.date, Off.DOY, Off.DOY.oct, long, lat) %>%
   as_ped(formula = Surv(time = Off.DOY.oct,                            # follow-up time
                         event = froze.bool & !is.na(Off.DOY.oct)) ~ .) # lake thawed if it froze & thaw date not NA
 
@@ -51,63 +56,148 @@ pam.thaw.na <- read_rds(here::here('analysis/models/pam-thaw-na4.rds'))
 pam.thaw.eura <- read_rds(here::here('analysis/models/pam-thaw-eura4.rds'))
 
 # make new data for predictions ####
-years <- seq(1950, 2010, by = 10)
+YEARS <- c(1950, 1995, 2010)
+YEARS <- seq(1950, 2010, by = 10)
 
 # function to make predictions and save them
-pred.save <- function(d, model, file.name = NULL, n.spatial = 30, dist = 0.2,
-                      years = years) {
-  # make new data
-  pred <- make_newdata(d,
-                       Year = years,
-                       tend = unique(tend),
-                       long = seq(min(d$long) - 5,
-                                  max(d$long) + 5,
-                                  length.out = n.spatial),
-                       lat = seq(min(d$lat) - 5,
-                                 max(d$lat) + 5,
-                                 length.out = n.spatial),
-                       lake = c('NA')) %>%
+pred.save <- function(d, model, years, stepsize = 1, latlong.step.ratio = 0.5,
+                      TENDS = NULL) {
+  
+  # filter lat/long newdata to land only
+  longlat <-
+    # spatial data
+    expand_grid(x = seq(round(min(d$long)) - 5,
+                        round(max(d$long)) + 5,
+                        by = stepsize),
+                # finer steps in y bc of distorsion in polar projection
+                y = seq(round(min(d$lat)) - 5,
+                        round(max(d$lat)) + 5,
+                        by = stepsize * latlong.step.ratio)) %>%
+    mutate(z = 0) %>%
     
-    # filter to avoid extrapolating too far
-    filter(! exclude.too.far(long, lat, d$long, d$lat, dist))
+    # convert to raster
+    rasterFromXYZ() %>%
+    
+    # remove spatial points that are not on land
+    mask(world) %>%
+    
+    # convert back to a tibble
+    rasterToPoints() %>%
+    as_tibble() %>%
+    
+    # remove unnecessary column
+    dplyr::select(-z) %>%
+    
+    # add location column
+    mutate(loc = paste(x, y))
   
-  # group to estimate hazard for every year and at every location
-  pred <- group_by(pred, Year, long, lat)
-  
-  # make predictions
-  pred <- add_surv_prob(pred,
-                        object = model,
-                        ci = TRUE,
-                        se_mult = qnorm(0.945), # 89% CIs
-                        terms = c('s(tend)', 's(Year)', 's(long,lat)',
-                                  'ti(tend,Year)', 'ti(tend,long,lat)',
-                                  'ti(Year,long,lat)'))
-  
-  # filter to days with cumulative probability closest to 0.5 (i.e. expected occurrece date)
-  pred <- mutate(pred,
-                 p = 1 - surv_prob,
-                 lwr = 1 - surv_lower,
-                 upr = 1 - surv_upper) %>%
-    select(Year, tend, long, lat, p, lwr, upr) %>%
-    pivot_longer(c('p', 'lwr', 'upr'), names_to = 'stat', values_to = 'value') %>%
-    group_by(Year, long, lat, stat) %>%
-    filter(abs(value - .5) == min(abs(value - .5))) %>%
-    filter(!duplicated(paste(Year, long, lat)))
-  
-  # save the predictions
-  if(is.null(file.name)) {
-    pred
+  if(is.null(TENDS)) {
+    # predict expected dates
+    make_newdata(d,
+                 lake = c('NA'), # to ensure that random effect is not included
+                 Year = years,
+                 tend = unique(tend),
+                 long = seq(round(min(d$long)) - 5,
+                            round(max(d$long)) + 5,
+                            by = stepsize),
+                 lat = seq(round(min(d$lat)) - 5,
+                           round(max(d$lat)) + 5,
+                           by = stepsize)) %>%
+      mutate(loc = paste(long, lat)) %>%
+      
+      # filter to terrestrial locations only
+      filter(loc %in% longlat$loc) %>%
+      
+      # group to estimate hazard for every year and at every location
+      group_by(Year, long, lat) %>%
+      
+      # make predictions
+      add_surv_prob(object = model,
+                    ci = TRUE,
+                    se_mult = qnorm(0.945), # 89% CIs
+                    terms = c('s(tend)', 's(Year)', 's(long,lat)',
+                              'ti(tend,Year)', 'ti(tend,long,lat)',
+                              'ti(Year,long,lat)')) %>%
+      
+      # filter to days with cumulative probability closest to 0.5 (i.e. E(doy))
+      mutate(p = 1 - surv_prob,
+             lwr = 1 - surv_lower,
+             upr = 1 - surv_upper) %>%
+      dplyr::select(Year, tend, long, lat, p, lwr, upr) %>%
+      pivot_longer(c('p', 'lwr', 'upr'), names_to = 'stat',
+                   values_to = 'value') %>%
+      group_by(Year, long, lat, stat) %>%
+      filter(abs(value - .5) == min(abs(value - .5))) %>%
+      filter(!duplicated(paste(Year, long, lat)))
   } else {
-    saveRDS(pred, paste0(file.name, '-spatial-predictions.rds'))
+    # predict P for given days
+    make_newdata(d,
+                 lake = c('NA'), # to ensure that random effect is not included
+                 Year = years,
+                 tend = TENDS,
+                 long = seq(round(min(d$long)) - 5,
+                            round(max(d$long)) + 5,
+                            by = stepsize),
+                 lat = seq(round(min(d$lat)) - 5,
+                           round(max(d$lat)) + 5,
+                           by = stepsize)) %>%
+      mutate(loc = paste(long, lat)) %>%
+      
+      # filter to terrestrial locations only
+      filter(loc %in% longlat$loc) %>%
+      
+      # group to estimate hazard for every year and at every location
+      group_by(Year, long, lat) %>%
+      
+      # make predictions
+      add_surv_prob(object = model,
+                    ci = TRUE,
+                    se_mult = qnorm(0.945), # 89% CIs
+                    terms = c('s(tend)', 's(Year)', 's(long,lat)',
+                              'ti(tend,Year)', 'ti(tend,long,lat)',
+                              'ti(Year,long,lat)')) %>%
+      
+      # filter to days with cumulative probability closest to 0.5 (i.e. E(doy))
+      mutate(p = 1 - surv_prob,
+             lwr = 1 - surv_lower,
+             upr = 1 - surv_upper) %>%
+      dplyr::select(Year, tend, long, lat, p, lwr, upr) %>%
+      pivot_longer(c('p', 'lwr', 'upr'), names_to = 'stat', values_to = 'value')
   }
+
 }
 
-# predict and save
-pred.na.f <- pred.save(freeze.na, pam.freeze.na, 'pam-freeze-na')
-pred.eura.f <- pred.save(freeze.eura, pam.freeze.eura, 'pam-freeze-eura')
-pred.na.t.1 <- pred.save(thaw.na, pam.thaw.na, years = years[1:3]) # too big for one run
-pred.na.t.2 <- pred.save(thaw.na, pam.thaw.na, years = years[4:5])
-pred.na.t.3 <- pred.save(thaw.na, pam.thaw.na, years = years[6:7])
-pred.na.t <- saveRDS(rbind(pred.na.t.1, pred.na.t.2, pred.na.t.3),
-                     'pam-thaw-na-spatial-predictions.rds')
-pred.eura.t <- pred.save(thaw.eura, pam.thaw.eura, 'pam-thaw-eura')
+# predict and save (too big for a single run)
+fun <- function(d, m) {
+  # approximately 10GB per year of data
+  purrr::map(YEARS,
+             function(y) pred.save(d = d, model = m, y = y)) %>%
+    bind_rows()
+}
+
+# predict average date (P = 0.5)
+pred.na.f <- fun(freeze.na, pam.freeze.na)
+saveRDS(pred.na.f, 'analysis/plots/predictions/pred-na-f.rds')
+
+pred.eura.f <- fun(freeze.eura, pam.freeze.eura)
+saveRDS(pred.eura.f, 'analysis/plots/predictions/pred-eura-f.rds')
+
+pred.na.t <- fun(thaw.na, pam.thaw.na)
+saveRDS(pred.na.t, 'analysis/plots/predictions/pred-na-t.rds')
+
+pred.eura.t <- fun(thaw.eura, pam.thaw.eura)
+saveRDS(pred.eura.t, 'analysis/plots/predictions/pred-eura-t.rds')
+
+# predict P on given tends
+TENDS <- c(75, 125, 175, 225)
+pred.na.f.est <- pred.save(freeze.na, pam.freeze.na, YEARS, TENDS = TENDS)
+saveRDS(pred.na.f.est, 'analysis/plots/predictions/pred-na-f-est-p.rds')
+
+pred.eura.f.est <- pred.save(freeze.eura, pam.freeze.eura, YEARS, TENDS = TENDS)
+saveRDS(pred.eura.f.est, 'analysis/plots/predictions/pred-eura-f-est-p.rds')
+
+pred.na.t.est <- pred.save(thaw.na, pam.thaw.na, YEARS, TENDS = TENDS)
+saveRDS(pred.na.t.est, 'analysis/plots/predictions/pred-na-t-est-p.rds')
+
+pred.eura.t.est <- pred.save(thaw.eura, pam.thaw.eura, YEARS, TENDS = TENDS)
+saveRDS(pred.eura.t.est, 'analysis/plots/predictions/pred-eura-t-est-p.rds')
