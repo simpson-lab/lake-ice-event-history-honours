@@ -1,1 +1,0 @@
-This folder contains the scripts necessary for running the models and creating plots.
