@@ -1,7 +1,6 @@
 # setup ####
 # data accessing
 library('here')      # for easier directory referencing
-library('readr')     # to read in files as tibbles
 
 # data editing
 library('dplyr')     # makes data editing easier
@@ -10,7 +9,6 @@ library('tibble')    # a tibble is a fancy data.frame
 # graphics
 library('ggplot2')   # fancy plots
 library('ggdag')     # ggplot DAGs
-library('cowplot')   # ggplot in grids
 
 # Directed acyclical graphs ####
 pam.dag <-
