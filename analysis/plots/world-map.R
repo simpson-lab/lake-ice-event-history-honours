@@ -39,7 +39,9 @@ plt.world.static <-
   scale_color_manual('Data after 1995', values = c('#ff8000', '#3366cc')) +
   cowplot::theme_map() +
   theme(panel.grid.major = element_line(colour = "black", linetype = 'dashed'),
-        legend.position = 'top', axis.ticks = element_blank())
+        legend.position = 'top', axis.ticks = element_blank(),
+        text = element_text(size = 40)) +
+  guides(color = guide_legend(override.aes = list(size = 5)))
 plt.world.static
 ggsave('plots/lake-map.pdf', plt.world.static, width = 10, height = 10)
 
