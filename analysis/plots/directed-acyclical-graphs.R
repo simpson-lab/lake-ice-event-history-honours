@@ -74,3 +74,13 @@ ggdag(pam.dag, text_col = 'grey25', text_size = 2.5,
   scale_shape_manual('Observed', values = c(16, 17)) +
   theme_dag_blank() +
   theme(legend.position = 'bottom')
+
+# cannot condition on air temperature because it is a collider and thus
+# conditioning would break the causal paths and cause estimation issues.
+# However, conditioning on long, lat, altitude, year, and DOY would effectively
+# account for all causes of air temperature. If we do add air.temperature,
+# then the effects of year, tend, long, lat and altitude are only their effect
+# after accounting for the effect of air temperature, which does not leave much.
+# Thus, we could fit a model with air.temp and without the other variables, but
+# that model (air.temp causes changes in hazard) is not interesting or useful,
+# as it cannot measure the change over time and space (edited
