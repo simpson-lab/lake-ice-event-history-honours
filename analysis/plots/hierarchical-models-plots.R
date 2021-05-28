@@ -37,6 +37,7 @@ theme_set(theme_bw())
 
 # Import data ####
 ice <- read_rds(here::here('data/lake-ice-data.rds')) %>%
+  rename(Year = year) %>%
   filter(Year >= 1950) %>%
   mutate(continent = if_else(long > -30, 'Eurasia', 'North America'))
 ice.na <- filter(ice, continent == 'North America')
@@ -76,27 +77,14 @@ gam.dur.na <- read_rds('analysis/models/gam-dur-na-twlss2.rds')
 gam.dur.eura <- read_rds('analysis/models/gam-dur-eura-twlss2.rds')
 
 # change in hazard ####
-# North American lake
-lake.na <- c('WASCANA LAKE') # need a vector to prevent error
-long.na <- filter(ice.na, lake == lake.na, !duplicated(lake))$long
-lat.na <- filter(ice.na, lake == lake.na, !duplicated(lake))$lat
-
-# Eurasian lake
-lake.eura <- c('LAKE KALLAVESI (4079)') # need a vector to prevent error
-long.eura <- filter(ice.eura, lake == lake.eura, !duplicated(lake))$long
-lat.eura <- filter(ice.eura, lake == lake.eura, !duplicated(lake))$lat
-
 ### freezing
 # predictions grouped by year
-f.na.tend <- 
+f.na.tend  <- 
   make_newdata(freeze.na,
                Year = mean(Year),
-               tend = unique(tend),
-               lake = lake.na,
-               long = long.na,
-               lat = lat.na) %>%
+               tend = unique(tend)) %>%
   group_by(Year) %>%
-  add_hazard(pam.freeze.na) %>%
+  add_hazard(pam.freeze.na, terms = c('s(tend)', 's(Year)', 'ti(tend,Year)'))%>%
   ggplot(aes(tend)) +
   #geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper), alpha = 0.2, fill = pal[1]) +
   geom_line(aes(y = hazard)) +
@@ -114,20 +102,17 @@ f.na.year <-
 # change in freeze/thaw dates ####
 years <- c(1950, 1965, 1980, 1995, 2010) # years for predictions
 
-# North America (Wascana Lake, Canada) ----
+# North America ----
 ### freezing
 # predictions grouped by year
 pred.freeze.na.year <- 
   make_newdata(freeze.na,
                tend = unique(tend),
-               Year = years,
-               lake = lake.na,
-               long = long.na,
-               lat = lat.na) %>%
+               Year = years) %>%
+  filter(tend <= 250) %>%
   group_by(Year) %>%
-  add_hazard(pam.freeze.na) %>%
-  #add_cumu_hazard(pam.freeze.na) %>%
-  add_surv_prob(pam.freeze.na) %>%
+  #add_hazard(pam.freeze.na, terms = c('s(tend)', 's(Year)', 'ti(tend,Year)'))%>%
+  add_surv_prob(pam.freeze.na, terms =c('s(tend)','s(Year)','ti(tend,Year)'))%>%
   mutate(p.f = 1 - surv_prob,
          p.f.lwr = 1 - surv_lower,
          p.f.upr = 1 - surv_upper)
@@ -136,32 +121,26 @@ pred.freeze.na.year <-
 pred.thaw.na.year <- 
   make_newdata(thaw.na,
                tend = unique(tend),
-               Year = years,
-               lake = lake.na,
-               long = long.na,
-               lat = lat.na) %>%
+               Year = years) %>%
+  filter(tend <= 250) %>%
   group_by(Year) %>%
-  add_hazard(pam.thaw.na) %>%
-  #add_cumu_hazard(pam.thaw.na) %>%
-  add_surv_prob(pam.thaw.na) %>%
+  #add_hazard(pam.thaw.na, terms = c('s(tend)', 's(Year)', 'ti(tend,Year)')) %>%
+  add_surv_prob(pam.thaw.na, terms = c('s(tend)','s(Year)','ti(tend,Year)')) %>%
   mutate(p.t = 1 - surv_prob,
          p.t.lwr = 1 - surv_lower,
          p.t.upr = 1 - surv_upper)
 
-# Eurasia (Lake Kallavesi, Finland) ----
+# Eurasia ----
 ### freezing
 # predictions grouped by year
 pred.freeze.eura.year <- 
   make_newdata(freeze.eura,
                tend = unique(tend),
-               Year = years,
-               lake = lake.eura,
-               long = long.eura,
-               lat = lat.eura) %>%
+               Year = years) %>%
+  filter(tend <= 250) %>%
   group_by(Year) %>%
-  add_hazard(pam.freeze.eura) %>%
-  #add_cumu_hazard(pam.freeze.eura) %>%
-  add_surv_prob(pam.freeze.eura) %>%
+  #add_hazard(pam.freeze.eura, terms=c('s(tend)', 's(Year)', 'ti(tend,Year)'))%>%
+  add_surv_prob(pam.freeze.eura,terms=c('s(tend)','s(Year)','ti(tend,Year)'))%>%
   mutate(p.f = 1 - surv_prob,
          p.f.lwr = 1 - surv_lower,
          p.f.upr = 1 - surv_upper)
@@ -170,27 +149,25 @@ pred.freeze.eura.year <-
 pred.thaw.eura.year <- 
   make_newdata(thaw.eura,
                tend = unique(tend),
-               Year = years,
-               lake = lake.eura,
-               long = long.eura,
-               lat = lat.eura) %>%
+               Year = years) %>%
+  filter(tend <= 250) %>%
   group_by(Year) %>%
-  add_hazard(pam.thaw.eura) %>%
-  #add_cumu_hazard(pam.thaw.eura) %>%
-  add_surv_prob(pam.thaw.eura) %>%
+  #add_hazard(pam.thaw.eura, terms = c('s(tend)','s(Year)','ti(tend,Year)')) %>%
+  add_surv_prob(pam.thaw.eura, terms =c('s(tend)','s(Year)','ti(tend,Year)'))%>%
   mutate(p.t = 1 - surv_prob,
          p.t.lwr = 1 - surv_lower,
          p.t.upr = 1 - surv_upper)
 
 # plots ####
 # freezing ----
-pred.freeze.year <- bind_rows(mutate(pred.freeze.na.year, continent = 'North America'),
-                              mutate(pred.freeze.eura.year, continent = 'Eurasia'))
+pred.freeze.year <-
+  bind_rows(mutate(pred.freeze.na.year, continent = 'North America'),
+            mutate(pred.freeze.eura.year, continent = 'Eurasia'))
 
 freeze <-
   ggplot(pred.freeze.year, aes(tend, p.f, col = factor(Year))) +
   facet_grid(continent ~ .) +
-  geom_ribbon(aes(x = tend, ymin = p.f.lwr, ymax = p.f.upr, fill = factor(Year)),
+  geom_ribbon(aes(x = tend, ymin = p.f.lwr, ymax = p.f.upr, fill =factor(Year)),
               alpha = 0.1, inherit.aes = FALSE) +
   geom_line() +
   scale_color_manual('Year', values = pal) +
@@ -199,13 +176,14 @@ freeze <-
   theme(legend.position = 'top')
 
 # thawing ----
-pred.thaw.year <- bind_rows(mutate(pred.thaw.na.year, continent = 'North America'),
-                            mutate(pred.thaw.eura.year, continent = 'Eurasia'))
+pred.thaw.year <-
+  bind_rows(mutate(pred.thaw.na.year, continent = 'North America'),
+            mutate(pred.thaw.eura.year, continent = 'Eurasia'))
 
 thaw <-
   ggplot(pred.thaw.year, aes(tend, p.t, col = factor(Year))) +
   facet_grid(continent ~ .) +
-  geom_ribbon(aes(x = tend, ymin = p.t.lwr, ymax = p.t.upr, fill = factor(Year)),
+  geom_ribbon(aes(x = tend, ymin = p.t.lwr, ymax = p.t.upr, fill =factor(Year)),
               alpha = 0.1, inherit.aes = FALSE) +
   geom_line() +
   scale_color_manual('Year', values = pal) +
@@ -219,7 +197,7 @@ plt.ft <- plot_grid(freeze + theme(legend.position = 'none'),
                     thaw + theme(legend.position = 'none'),
                     labels = c('a.', 'b.'), ncol = 2)
 plt.ft <- plot_grid(leg.ft, plt.ft, rel_heights = c(0.1, 1), ncol = 1); plt.ft
-#save.plt(plt.ft, 'p-freeze-thaw.pdf', height = 3.5)
+save.plt(plt.ft, 'p-freeze-thaw.pdf', height = 5)
 
 # duration ----
 # large unexplained variance in duration for some individual lakes
