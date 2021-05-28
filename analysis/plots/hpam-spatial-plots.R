@@ -1,5 +1,4 @@
 # data accessing
-library('here')      # for easier directory referencing, conflicts with lubridate::here
 library('readr')     # to read in files as tibbles
 
 # data processing
@@ -20,11 +19,11 @@ library('sf')        # spatial features
 #library('sp')        # spatial objects
 library('spData')    # map data for sp package
 library('raster')    # to clip rasters to inside map borders
-source(here::here('functions/save.plt.R'))    # to save plots easily
+source('functions/save.plt.R') # to save plots easily
 
 # Import data ####
 # read in data
-ice <- read_rds(here::here('data/lake-ice-data.rds')) %>%
+ice <- read_rds('data/lake-ice-data.rds') %>%
   filter(year >= 1950) %>%
   mutate(continent = if_else(long > -30, 'Eurasia', 'North America'))
 ice.na <- filter(ice, continent == 'North America')
@@ -101,18 +100,18 @@ eura.t <-
 
 # check if values are close to 0.5
 layout(matrix(1:4, ncol = 2))
-hist(na.f$value)
-hist(eura.f$value)
-hist(na.t$value)
-hist(eura.t$value)
+hist(na.f$value, breaks = 40)
+hist(eura.f$value, breaks = 40)
+hist(na.t$value, breaks = 40)
+hist(eura.t$value, breaks = 40)
 layout(1)
 
 # check if estimated days are extreme
 layout(matrix(1:4, ncol = 2))
-hist(na.f$tend)
-hist(eura.f$tend)
-hist(na.t$tend)
-hist(eura.t$tend)
+hist(na.f$tend, breaks = 40)
+hist(eura.f$tend, breaks = 40)
+hist(na.t$tend, breaks = 40)
+hist(eura.t$tend, breaks = 40)
 layout(1)
 
 #### Spatio-temporal plots
@@ -244,7 +243,8 @@ plt.f <-
   labs(x = NULL, y = NULL) +
   scale_x_continuous(breaks = NULL, expand = c(.2, 0)) +
   scale_y_continuous(breaks = NULL, expand = c(.2, 0)) +
-  scale_fill_viridis_c(expression(atop(Mean~freezing~date,(days~after~June~30^{th}))),
+  scale_fill_viridis_c(expression(atop(Mean~freezing~date,
+                                       (days~after~June~30^{th}))),
                        option = 'B', direction = -1) +
   theme(legend.position = 'bottom', text = element_text(size = 30),
         legend.key.width = unit(2.5, 'cm'), legend.key.height = unit(1, 'cm'))
