@@ -228,7 +228,7 @@ plt.diff('t') +
   geom_point(aes(long, lat), color = 'green',
              data = dplyr::filter(ice.eura, ! duplicated(lake)))
 
-# estimated locations ####
+# estimated dates ####
 # freeze dates
 plt.f <-
   ggplot(WorldData) +
@@ -245,7 +245,7 @@ plt.f <-
   scale_y_continuous(breaks = NULL, expand = c(.2, 0)) +
   scale_fill_viridis_c(expression(atop(Mean~freezing~date,
                                        (days~after~June~30^{th}))),
-                       option = 'B', direction = -1) +
+                       option = 'B', direction = 1) +
   theme(legend.position = 'bottom', text = element_text(size = 30),
         legend.key.width = unit(2.5, 'cm'), legend.key.height = unit(1, 'cm'))
 
