@@ -6,7 +6,7 @@ author:
 bibliography: hpams-refs.bib
 csl: freshwater-biology.csl
 fontsize: 12pt
-indent: true
+indent: false
 header-includes:
     - \usepackage{setspace}\doublespacing
     - \usepackage{gensymb}
@@ -23,8 +23,10 @@ output:
     keep_tex: false
 ---
 
+\newcommand{\code}[1]{\texttt{#1}}
+
 ```{r setup, include=FALSE, fig.align='center'}
-knitr::opts_chunk$set(echo = FALSE, fig.pos = 'p')
+knitr::opts_chunk$set(echo = FALSE, fig.pos = 'h')
 options(knitr.table.format = 'markdown', knitr.graphics.auto_pdf = TRUE)
 library('tibble')
 library('dplyr')
@@ -43,13 +45,17 @@ june.lab <- expression(Days~after~June~30^{th})
 
 # Abstract {-}
 
-Loss of lake ice has been recognized as an important indicator of climate change. Some work has done on estimating the loss of lake ice, but the majority of the studies use data from single sites and linear methods, which are unable to estimate large-scale spatio-temporal trends, nor can they account for the recent acceleration in loss. This paper estimates the daily hazard of a lake freezing or thawing using a smooth, hierarchical, time-to-event approach. We use piecewise-exponential additive models to estimate spatio-temporal changes in lake ice onset and offset in the past 70 years using a large dataset of 568 lakes and 628 distinct observation stations from the northern hemisphere. The results presented here demonstrate a widespread and accelerating but heterogeneous shift towards later freezing dates and earlier thaw dates, with an increase in lake ice cover in some areas. The hierarchical approach allowed the models to estimate changes in lake ice in areas where little to no data were available. Considerations are made on the effects of the loss of lake ice on Eurasian and North American peoples, including North American First Nations.
+Loss of lake ice has been recognized as an important indicator of climate change. Some work has done on estimating how much has been lost in recent decades, but the majority of the studies use data from single sites and linear methods, so they unable to estimate large-scale spatio-temporal trends, nor can they account for the recent acceleration in loss. This paper estimates the daily hazard of a lake freezing or thawing using a smooth, hierarchical, time-to-event approach. We fit piecewise-exponential additive models to a large dataset of 568 lakes and 628 distinct observation stations from the northern hemisphere to estimate spatio-temporal changes in lake ice onset and offset in the past 70 years. The results presented here demonstrate a widespread and accelerating but heterogeneous shift towards later freezing dates and earlier thaw dates, with an increase in lake ice cover in some areas. The hierarchical approach allowed the models to estimate changes in lake ice in areas where little to no data were available. Considerations are made on the effects of the loss of lake ice on Eurasian and North American Peoples, including North American First Nations.
 
 <!--
-Central claim:
-results follow the agreed upon results, but offer more fine detail:
-1. hierarchical modelling allows to account for spatial effects and variance between lakes and estimate common trends with greater accuracy and precision
+Central claims:
+results follow results supported by many recent papers, but offer finer detail:
+1. hierarchical modelling allows to account for (a) spatial effects and variance between lakes, and (b) estimate common trends with greater accuracy and precision
 2. time-to-event approach allows an estimation of the daily "risk" of freezing and thawing, thus estimating dates more appropriately
+
+minor claims:
+- change in ice changes NPP (likely increases, but not sure)
+- cultural/economical/social loss
 -->
 
 \pagebreak
@@ -58,49 +64,59 @@ results follow the agreed upon results, but offer more fine detail:
 
 # Introduction
 
-Approximately half of the Earth’s lakes freeze periodically [@verpoorter_global_2014], with important consequences for the biota that inhabit them [@hampton_ecology_2017]. Despite this, under-ice ecology in lakes has been relatively under-studied [@hampton_ecology_2017]. It is known that net primary productivity (NPP) in lakes is generally lower in winter than in summer, but the main drivers of this seasonality are hard to identify [@hampton_ecology_2017]. Lower winter NPP may be due to multiple factors, including lower inputs of heat, nutrients, photosynthetic radiation, and oxygen which often result form seasonal ice cover [@vincent_polar_2008; @hampton_ecology_2017]. Still, there are some lakes that do not exhibit significant seasonality in NPP despite winter ice cover [@hampton_ecology_2017].
+Despite the important consequences the periodic freezing of lakes has for the biota that inhabit them, under-ice ecology in lakes has been relatively under-studied [@hampton_ecology_2017]. Lake net primary productivity (NPP) is generally lower in winter than in summer, but the main drivers of this seasonality are hard to identify [@hampton_ecology_2017]. Lower winter NPP may be due to multiple factors, including lower inputs of heat, nutrients, photosynthetic radiation, and oxygen which often result form seasonal ice cover [@vincent_polar_2008]. Still, there are some lakes that do not exhibit significant seasonality in NPP despite winter ice cover [@hampton_ecology_2017].
 
-Lake ice is also important from an anthropological viewpoint -- many peoples and communities depend on winter ice cover for economic, cultural, and spiritual activities <!-- [@knoll_consequences_2019; @golden_blue-ice_2015] -->. Many northern European countries (used to) have annual winter ice skating competitions that are (were) an important part of the local culture, while ice roads often provide essential transportation routes (i.e. ice roads) for many Indigenous Peoples in northern Canada. Many communities also rely on ice fishing as a mean of sustenance during winter [@knoll_consequences_2019]. The annual freezing of some lakes has an important role in local religions and cultural identities, as is the case of lake Suwa in Japan, whose freezing dates have been recorded since 1443 by the local Shinto temple and are still recorded today [@arakawa_fujiwhara_1954; @sharma_direct_2016; @knoll_consequences_2019]. Blue ice in particular has great cultural importance for many First Nations People in in northern Canada [@golden_blue-ice_2015].
+Lake ice is also important from an anthropological viewpoint -- many Peoples and communities depend on winter ice cover for economic, cultural, and spiritual activities [@knoll_consequences_2019; @golden_blue-ice_2015]. Many northern European countries (used to) have annual winter ice skating competitions that are (were) an important part of the local culture, while ice roads often provide essential transportation routes (i.e. ice roads) for many Indigenous Peoples in northern Canada and Alaska. Many communities also rely on ice fishing as a mean of sustenance during winter [@knoll_consequences_2019]. The annual freezing of some lakes has an important role in local religions and cultural identities, as is the case of lake Suwa in Japan, whose freezing dates have been recorded since 1443 by the local Shinto temple and are still recorded today [@arakawa_fujiwhara_1954; @sharma_direct_2016; @knoll_consequences_2019]. Blue ice in particular has great cultural importance for multiple Indigenous Peoples in northern Canada [@golden_blue-ice_2015].
 
-Some research has been done on estimating the effects of a warming climate on lake ice phenology, including estimating the change in frequency of lake ice formation [@sharma_direct_2016] and the main drivers of lake ice loss [@sharma_widespread_2019; @lopez_reaching_2019]. Unfortunately, however, most of this research has been done on individual lakes, rather than at regional or global scales, and a substantial portion of the studies used inappropriate methods that might have produced biased and inaccurate results. Some authors heve analyzed multiple time series, but often times they compared estimated changes by regressing on the estimated coefficents, rather than fitting a single common model [e.g. @warne_geography_2020].
+Some research has been done on estimating the effects of a warming climate on lake ice phenology, including estimating the change in frequency of lake ice formation [@sharma_direct_2016] and the main drivers of lake ice loss [@sharma_widespread_2019; @lopez_reaching_2019]. Unfortunately, however, most of the research has been done on individual lakes, rather than at regional or global scales, and a substantial portion of the studies used statistically inappropriate methods that might have produced biased and inaccurate results. Some authors have analyzed multiple time series, but often times they compared estimated changes by regressing on the estimated coefficients, rather than fitting a single hierarchical model [e.g. @warne_geography_2020; see @pedersen_hierarchical_2019 for hierarchical modelling].
+
+A more efficient model should instead be able to (1) account for accelerating and non-monotonic trends, (2) account for variation between lakes, (3) estimate spatial trends, and (4) allow the spatial trends to change over time. Such a model should also relax some of the (likely problematic) assumptions of linear models, such as linearity, monotonicity, and spatio-temporal uniformity. Hierarchical generalized additive models are capable of accounting for (1) nonlinear effects, (2) multiple lakes in a single model, (3) the spatial relationship between lakes, and (4) interactions between smooth terms via tensor product interaction terms.
 
 Fitting a single model to all time series at once reduces the complexity the analysis and allows us to directly estimate common spatio-temporal trends between lakes while incorporating the variance that exists between lakes. This hierarchical approach is important because the location and morphology of a lake have strong effects on ice phenology [@woolway_global_2020]. In this paper, we estimate the change in lake ice occurrence since 1950 using a hierarchical approach that allows us to fit a single model to many lake time series [@pedersen_hierarchical_2019]. The freeze and thaw dates were analyzed using a time-to-event approach which allows us to estimate the probability of a lake freezing or thawing on a given day [@bender_generalized_2018]. 
 
 In statistical terms, the *hazard* of an event is the probability of the occurrence of an event within a period of time $\Delta t$. For instance, an ice-free lake has an unknown probability of freezing at a given moment in time, $t$, and the probability of *being frozen* at time $t$ is equal to the chance of it freezing at time $t$ or any time before it (provided that it has not thawed afterwards). We can then define the cumulative distribution function for the probability of a lake being frozen up to time $t$ as:
 
+<!-- \singlespacing -->
 \begin{equation} \label{p-f}
-\widehat F_{freeze}(t) = P(T_{freeze} \le t),
+F_{freeze}(t) = P(T_{freeze} \le t),
 \end{equation}
+<!-- \doublespacing -->
 
 where $T_{freeze}$ indicates the unknown true freezing time, and $t$ is a given moment in time. Similarly, let the probability of a lake being ice-free at time $t$ be indicated by
 
+<!-- \singlespacing -->
 \begin{equation} \label{p-t}
-\widehat F_{thaw}(t) = P(T_{thaw} \le t).
+F_{thaw}(t) = P(T_{thaw} \le t).
 \end{equation}
+<!-- \doublespacing -->
 
-The probability of an event happening at or before time $t$ is equal to the complement of the event happening *after* time $t$, i.e. $P(T \le t) = 1 - P(T > t)$. From a survival analysis perspective, $P(T > t)$ is the probability that a patient will survive up to time $t$, so $P(T > t)$ is commonly referred to as the *survival* probability at time $t$. It is estimated using the survival function $\widehat S(t)$. With regards to lake ice phenology, $\widehat S(t)$ indicates the probability of a lake freezing or thawing after time $t$. Therefore, we can state that
+The probability of an event happening at or before time $t$ is equal to the complement of the event happening *after* time $t$, i.e. $P(T \le t) = 1 - P(T > t)$. From a *survival analysis* perspective [@kleinbaum_survival_2012], $P(T > t)$ is the probability that a patient will survive up to time $t$, so $P(T > t)$ is commonly referred to as the *survival* probability at time $t$. It is calculated using the estimated survival function $\widehat S(t)$. With regards to lake ice phenology, $S(t)$ indicates the probability of a lake freezing or thawing after time $t$. Therefore, we can state that
 
-$$P(T \le t) = 1 - P(T > t) = 1 - \widehat S(t),$$
+$$P(T \le t) = 1 - P(T > t) = 1 - S(t),$$
 
-where $t$ is a specific point in time, $T$ is the random variable for time, and $\widehat S(t)$ is the survival function [@kleinbaum_survival_2012]. This is true whether we are estimating the date of freeze or thaw events.
+where $t$ is a specific point in time, $T$ is the random variable for the occurrence time, and $S(t)$ is the survival function [@kleinbaum_survival_2012]. This is true whether we are estimating the date of freeze or thaw events.
 
-We can also estimate the hazard of an event occurring in a given window of time $\Delta t$, such as a single day or a week, given that the event has not yet happened. Mathematically, we can write this as $P(t < T \le t + \Delta t)$. We can estimate the hazard of an event happening by dividing $P(t < T \le t + \Delta t)$ by $\Delta t$, so that we can compare hazards from time periods of different $\Delta t$s. If we let $\Delta t$ be 1 day, we can estimate the daily hazard of the event happening on any day using the *hazard* function [@kleinbaum_survival_2012]:
+We can also estimate the hazard of an event occurring in a given period of time $\Delta t$, such as a single day or a week. Mathematically, we can write this as $P(t < T \le t + \Delta t)$. We can estimate the hazard of an event by dividing $P(t < T \le t + \Delta t)$ by $\Delta t$, so that we can compare hazards from time periods of different $\Delta t$s. If we let $\Delta t$ be 1 day, we can estimate the daily hazard of the event happening on any day using the *hazard* function, $\lambda(t)$. Generally, however, we allow $\Delta t$ to approach zero so we can estimate the instantaneous hazard, given that the event did not occur before time $t$ [@kleinbaum_survival_2012]:
 
+<!-- \singlespacing -->
 \begin{equation} \label{hazard-limit}
-\widehat \lambda(t) = \lim_{\Delta t \rightarrow 0} \frac {P(t \leq T < t + \Delta t | T \geq t)}{\Delta t}.
+\widehat \lambda(t) \approx \lambda(t) = \lim_{\Delta t \rightarrow 0} \frac {P(t \leq T < t + \Delta t | T \geq t)}{\Delta t}.
 \end{equation}
+<!-- \doublespacing -->
 
-To estimate the hazard of an event occurring up to and including time $t$, we can use the cumulative hazard function
+To estimate the hazard of an event occurring up to and including time $t$, we can use the estimated cumulative hazard function
 
+<!-- \singlespacing -->
 \begin{equation} \label{cumu-hazard}
-\widehat \Lambda(t) = \int_0^t \lambda(T)~dT = P(0 \leq T < t | T \geq 0).
+\widehat \Lambda(t) \approx \Lambda(t) = \int_0^t \lambda(T)~dT = P(0 \leq T \le t).
 \end{equation}
+<!-- \doublespacing -->
 
-Intuitively, the probability of an event happening after time $t$ and the cumulative hazard of the event are closely related. Using the fact that $P(A|B) = \frac{P(A \wedge B)}{P(B)}$, we can re-write the hazard function in the form:
+<!--Intuitively, the probability of an event happening after time $t$ and the cumulative hazard of the event are closely related. Using the fact that $P(A|B) = \frac{P(A \wedge B)}{P(B)}$, we can re-write the hazard function in the form:
 
 $$\widehat \lambda(t) = \lim_{\Delta t \rightarrow 0} \frac {P(t \leq T < t + \Delta t | T \geq t)}{\Delta t} = \lim_{\Delta t \rightarrow 0} \frac {P(t \le T < t + \Delta t)}{P(T \geq t)\Delta t},$$
 
-and since $\widehat S(t) = P(T >t)$, we can further re-write $\widehat \lambda(t)$ as
+and since $S(t) = P(T \ge t)$, we can further re-write $\widehat \lambda(t)$ as
 
 $$\widehat \lambda(t) = \lim_{\Delta t \rightarrow 0} \frac {P(T < t + \Delta t )}{P(T \geq t)\Delta t} = \lim_{\Delta t \rightarrow 0} \frac {1 - \widehat S(t + \Delta t)}{\widehat S(t)\Delta t}.$$
 
@@ -114,28 +130,33 @@ $$\widehat \lambda(t) =  - \frac{\frac{\partial S(t)}{\partial t}}{S(t)}.$$
 
 Finally, by solving for $\widehat S(t)$, we can estimate the survival function from the hazard function [@kleinbaum_survival_2012]:
 
+\singlespacing
 \begin{equation} \label{surv-hazard}
 \widehat S(t) = \exp \left [-\int_0^t \widehat \lambda(T)~dT \right] = \exp \left [- \widehat \Lambda(T) \right].
 \end{equation}
+\doublespacing
+-->
 
-This allows us to estimate the probability of an event occurring at or before time $t$ as a function of the cumulative hazard:
+The probability of an event occurring at or before time $t$ can then be estimated as a function of the cumulative hazard [@kleinbaum_survival_2012]:
 
+<!-- \singlespacing -->
 \begin{equation} \label{p}
-\widehat F(t) =1 - e^ {- \widehat \Lambda(t)}.
+F(t) \approx \widehat F(t) = 1 - e^ {- \widehat \Lambda(t)}.
 \end{equation}
+<!-- \doublespacing -->
 
-Under these assumptions, events are expected to occur (i.e. $P(T \le t) = P(T \ge t) = 0.5$) when the hazard is equal to $\lambda(t) = 1.177$ (and thus $\log \left [\lambda(t) \right ] = 0.1633$.<!--, see Figure \@ref(fig:hazard-p-plot)).
+<!-- Under these assumptions, events are expected to occur (i.e. $P(T \le t) = P(T \ge t) = 0.5$) when the hazard is equal to $\lambda(t) = 1.177$ (and thus $\log \left [\lambda(t) \right ] = 0.1633$).<!--, see Figure \@ref(fig:hazard-p-plot)).
 
 ```{r hazard-p-plot, fig.cap='Cumulative probability of an event occurring before time $t$ for given values of log-hazard $\\log \\left [\\lambda(t) \\right ]$, hazard $\\lambda(t)$, cumulative hazard $\\Lambda(t)$, and survival $S(t)$. Note that $P(T \\le t) = 0.5$ when $\\log \\left[ \\lambda(t) \\right ] = 0.163$, $\\lambda(t) = 1.177$, $\\Lambda(t) = 0.693$, and $S(t) = 0.5$.', cache=TRUE}
 knitr::include_graphics('../plots/hazard-viz.pdf')
 ```
 -->
 
-Piecewise-exponential Additive Models [PAMs, see @bender_generalized_2018] are a special case of Generalized Additive Models [GAMs, see @hastie_generalized_1986; @hastie_generalized_1999; @wood_generalized_2017] which estimate the log expected hazard of events $\log\left[\mathbb E\left(\widehat \lambda(t)\right)\right]$. With PAMs, it is possible to estimate functions (\@ref(p-f))-(\@ref(p)). PAMs assume that the change in hazard is constant between two consecutive observations. Under these assumptions, it can be shown that the hazard function $\widehat \lambda(t)$ has a Poisson likelihood, and thus it is possible to model $\widehat \lambda(t)$ using a Poisson GAM [@bender_generalized_2018]. PAMs standardize $\log\left[ \widehat \lambda(t) \right]$ using an offset term equal to the log-transformed number of days between observations, $\log(\frac{t_i - t_{i-1}}{\Delta t})$.
+Piecewise-exponential Additive Models [PAMs, see @bender_generalized_2018] are a special case of Generalized Additive Models [GAMs, see @hastie_generalized_1986; @hastie_generalized_1999; @wood_generalized_2017] which estimate the log expected hazard of events $\log\left[\mathbb E\left(\widehat \lambda(t)\right)\right] = \log\left[\lambda(t)\right]$. With PAMs, it is possible to estimate functions (\@ref(p-f))-(\@ref(p)). PAMs assume that the change in hazard is constant between two consecutive observations. Under these assumptions, it can be shown that the hazard function $\widehat \lambda(t)$ has a Poisson likelihood, and thus it is possible to model $\widehat \lambda(t)$ using a Poisson GAM [@bender_generalized_2018]. PAMs standardize $\log\left[\widehat \lambda(t) \right]$ with an offset term of the log-transformed amount of time between observations [@bender_generalized_2018].
 
-Before fitting a PAM, it is important to convert the dataset to the Piecewise Exponential Data (PED) format. The PED format rearranges the data such that the $i^{th}$ observation corresponds to the $i^{th}$ row with the interval $[t_i, \Delta t_i)$, the corresponding offset, and a binary indicator variable $j_i$ which is equal to 0 if the event did not happened and 1 if the event occurred in the interval [@bender_generalized_2018]. An example of a PED structure is given in section \@ref(ice-datasets).
+Before fitting a PAM, it is important to convert the dataset to the Piecewise Exponential Data (PED) format. The PED format rearranges the data such the $i^{th}$ observation is broken into multiple intervals $(\kappa_{j−1}, \kappa_j], j = 1,...,J$ with their respective and event indicators $\delta_{ij}$, and offsets $o_{ij}$. The event indicators take the value 1 if the event occurred in the interval $\left(\kappa_{j-1}, \kappa_j\right]$ and 0 otherwise (including if the event did not occur during the observation time). The offset is equal to the log-transformed interval if $\delta_{ij} = 1$ and $\log\left(t_i - \kappa_j\right)$ otherwise, i.e. $o_{ij} = \log\left[\min\left(\kappa_j − \kappa_{j−1}, t_i − \kappa_{j−1}\right)\right]$. An example of a PED structure is given in section \@ref(ice-datasets).
 
-In this paper, we fit PAMs to a large ice phenology dataset while accounting for spatio-temporal trends to estimate the change in the daily hazard of freezing and thawing throughout the Northern hemisphere since 1950. We used smooth predictors to allow the hazard to vary nonlinearly over time and space [@. We used a hierarchical Bayesian approach to fit Hierarchical PAMs (HPAMs) which could estimate the the spatial component of the model and the unaccounted variation between lakes [@pedersen_hierarchical_2019].
+In this paper, we fit PAMs to a large ice phenology dataset while accounting for spatio-temporal trends to estimate the change in the daily hazard of freezing and thawing throughout the Northern hemisphere since 1950. We used smooth predictors to allow the hazard to vary nonlinearly over time and space. We used a hierarchical Bayesian approach to fit Hierarchical PAMs (HPAMs) which could estimate common spatial trends and the unaccounted variation between lakes [@pedersen_hierarchical_2019].
 
 <!-- \pagebreak -->
 
@@ -143,9 +164,9 @@ In this paper, we fit PAMs to a large ice phenology dataset while accounting for
 
 ## Lake ice datasets {#ice-datasets}
 
-The lake ice data were obtained from the Global Lake and River Ice Phenology Database [GLRIPD, http://nsidc.org/data/G01377.html, see @benson_global_2002]. Prior to analysis, GLRIPD was filtered to only include lakes with known coordinates and observations after 1950, since the majority of the observations occurred after 1950 (SI, Figure \@ref(fig:record-length)). Although the analysis could have been performed for the entire dataset, the dataset was reduced to decrease model fitting time and potential sampling bias, since the majority of the data was in the period 1950-1995. A large portion of the observations are for temperate ($45^\circ$ N) North American lakes and sub-arctic ($62^\circ$ N) Finnish lakes, and the spatial distribution changes substantially after 1950, particularly in North America (SI, Figures \@ref(fig:obs-density) and \@ref(fig:lake-map)). All observations in the dataset are from lakes that freeze frequently.
+The lake ice data were obtained from the Global Lake and River Ice Phenology Database [GLRIPD, http://nsidc.org/data/G01377.html, see @benson_global_2002]. Prior to analysis, GLRIPD was filtered to only include lakes with known coordinates and observations after 1950, since the majority of the observations occurred after 1950 (SI, Figure \@ref(fig:record-length)). Although the analysis could have been performed for the entire dataset, the dataset was reduced to decrease model fitting time and potential sampling bias, since the majority of the data was in the period 1950-1995 (Figure \@ref(fig:record-length)). A large portion of the observations are for temperate ($45^\circ$ N) North American lakes and sub-arctic ($62^\circ$ N) Finnish lakes, and the spatial distribution changes substantially after 1950, particularly in North America (Figures \@ref(fig:lake-map) and \@ref(fig:obs-density)). All observations in the dataset are from lakes that freeze frequently.
 
-```{r lake-map, fig.cap='Polar projection of the lakes that in the final dataset. The points in orange indicate lakes for which no data was available after 1995, while blue points indicate lakes with at least one datapoint after 1995.', cache=TRUE}
+```{r lake-map, fig.cap='Polar projection of the lakes that in the final dataset. The points in orange indicate lakes for which no data was available after 1995, while blue points indicate lakes with at least one datapoint after 1995. Five lakes (two Eurasian, three North American; not shown) were excluded from the original dataset because they did not have data from after 1950.', cache=TRUE}
 knitr::include_graphics('../plots/lake-map.pdf')
 ```
 
@@ -155,9 +176,7 @@ Since many lakes froze or thawed in December and January, freeze and thaw dates 
 knitr::include_graphics('../plots/three-lake-example.pdf')
 ```
 
-The coordinates of the lakes were corrected using Google Maps if the original location was more than 0.01 degrees away from the lake's shore, unless the lake was large and irregular enough that changing the coordinates would not have an appreciable effect. Lake names were changed to a common name if the observation stations were for the same lake (e.g. "LAKE SUWA (ARAKAWA)" and "LAKE SUWA (WEATHER STATION)" were renamed to "LAKE SUWA") or if distinct lakes had the same name (e.g. "TROUT LAKE", Ontario, was changed to "TROUT LAKE, ON" to distinguish it from "TROUT LAKE" in the United States).
-
-Finally, the data was converted to the PED format for freeze events and thaw events (given that the lake was frozen). The freeze PEDs had a structure of the form:
+The coordinates of the lakes were corrected using Google Maps if the original location was more than 0.01 degrees away from the lake's shore, unless the lake was large and irregular enough that changing the coordinates would not have an appreciable effect. Lake names were changed to a common name if the observation stations were for the same lake (e.g. "LAKE SUWA (ARAKAWA)" and "LAKE SUWA (WEATHER STATION)" were renamed to "LAKE SUWA") or if distinct lakes had the same name (e.g. "TROUT LAKE", Ontario, was changed to "TROUT LAKE, ON" to distinguish it from "TROUT LAKE" in the United States). Finally, the data was converted to the PED format for freeze events and thaw events (given that the lake was frozen). The freeze PEDs had a structure of the form:
 
 ```{r bp-freeze-head, cache=TRUE}
 ice <- read_rds(here::here('data/lake-ice-data.rds')) %>%
@@ -169,66 +188,238 @@ ice <- read_rds(here::here('data/lake-ice-data.rds')) %>%
   select(-id) %>%
   mutate(lake = if_else(lake == 'LAKE SUWA', 'SUWA', as.character(lake)))
 
-knitr::kable(ice, digits = 2, caption = 'Example of piecewise exponential data format for the freezing dates of lakes in North America.', longtable = TRUE, booktabs = TRUE, align = 'l')
+knitr::kable(ice, digits = 2, caption = 'Example of piecewise exponential data format for the freezing dates of lakes in Eurasia.')
 ```
 
-The columns `tstart` and `tend` are the beginning and end of intervals $[t_{i - 1}, t_i)$ (recorded as the number of days after June $30^{th}$) for which the hazard function is estimated. Note that single-day intervals have an offset of $\log(1) = 0$, while longer intervals have non-zero offsets since the hazard of freezing within these periods is higher. The `ped_status` column indicates whether the lake is frozen (1) or not (0), and `Year` indicates the reference year. The thaw PEDs had a similar structure.
+\newpage
 
-All of the data processing was performed on in `R` [@r_core_team_r_2020], and the script is available in the GitHub repository under `data/freezing-dates.R` (see Appendix). The final dataset contains a total of 568 lakes and 628 distinct observation stations and is available in the GitHub repository as `data/lake-ice-data.rds` (see Appendix). Years in which a lake did not freeze were excluded from the thaw dataset (for that lake alone, all other observations for that year were kept).
+The columns `tstart` and `tend` are the beginning and end of intervals $\left(\kappa_{j - 1}, \kappa_j\right]$ (recorded as the number of days after June $30^{th}$) for which the hazard function is estimated. Note that single-day intervals have an offset of $\log(1) = 0$, while longer intervals have non-zero offsets since the hazard of freezing within these periods is higher. The `ped_status` column indicates whether the lake is frozen (1) or not (0), the `year` column indicates the reference year, and `long` and `lat` indicate the lake's location. The thaw PEDs had a similar structure.
+
+All of the data processing was performed on in `R` [@r_core_team_r_2021], and the script is available in the GitHub repository under `data/freezing-dates.R` (see Appendix). The final dataset contains a total of 568 lakes and 628 distinct observation stations and is available in the GitHub repository as `data/lake-ice-data.rds` (see Appendix). Years in which a lake did not freeze were excluded from the thaw dataset (for that lake alone, all other observations for that year were kept).
 
 ## Software
 
-All statistical analyses were performed in `R` version 3.6.2 or higher. HPAMs for freeze and thaw dates were fit using the `pammtools` package [version 0.2.2 or higher; @bender_pammtools_2018; @bender_generalized_2018]. <!-- while GAMs for the duration of ice cover were fit using `mgcv` [version 1.8-31; @wood_generalized_2017]. --> All plots were generated using `ggplot2` [version 3.3.0; @wickham_ggplot2_2016], `gratia` [version  0.3.1; @simpson_gratia_2020], and `cowplot` [version 1.0.0; @wilke_cowplot_2019]. When necessary, plots use a palette with colors that are distinguishable by most color-vision-deficient people.
+All statistical analyses were performed in `R` version 3.6.2 or higher. HPAMs for freeze and thaw dates were fit using the `pammtools` package [version 0.2.2 or higher; @bender_pammtools_2018; @bender_generalized_2018]. <!-- while GAMs for the duration of ice cover were fit using `mgcv` [version 1.8-31; @wood_generalized_2017]. --> Plots were generated using `ggplot2` [version 3.3.0 or higher; @wickham_ggplot2_2016], `gratia` [version  0.3.1 or higher; @simpson_gratia_2021], and `cowplot` [version 1.0.0 or higher; @wilke_cowplot_2020]. Maps were created using the `sf` [@pebesma_simple_2018],  `spData` [@bivand_spdata_2020], and `raster` [@hijmans_raster_2021] packages. When necessary, figures use a palette with colors that are distinguishable by most color-vision-deficient people.
 
 ## Model structure
 
-The North American and Eurasian HPAMs for freeze and thaw dates accounted for the change in hazard between years (`year`) and within years (`tend`), as well as over space. Factor smooths of `tend` and `year` were included in the models to allow both temporal smooths to vary slightly between lakes. Tensor interaction terms (`ti()`) were used to allow the effect of `tend` to vary over the years, and to allow the effects of `tend` and `year` to vary over space. `ti` terms allow the model to account for different rates of ice loss in different locations [@holland_polar_2003].
+The North American and Eurasian HPAMs for freeze and thaw dates accounted for the change in hazard between years (`year`) and within years (`tend`), as well as over space. Factor smooths of `tend` and `year` were included in the models to allow both temporal smooths to vary between lakes. Tensor product interaction terms (`ti`) were used to allow the effect of `tend` to vary over the years, and to allow the effects of `tend` and `year` to vary over space. `ti` terms allow the model to account for different rates of ice loss in different locations [@holland_polar_2003]:
 
 \singlespacing
 
-```{r hpam-code, eval=FALSE}
+```{r hpam-code, eval=FALSE, echo=TRUE}
 pamm(ped_status ~
-        s(tend, bs = 'cr', k = 10) +
-        s(year, bs = 'cr', k = 10) +             
-        s(tend, lake, bs = 'fs', k = 10) +     
-        s(Year, lake, bs = 'fs', k = 10) +     
-        s(long, lat, bs = 'ds', k = 20) +        
-        ti(tend, Year, bs = 'cr', k = c(5, 5)) +
-        ti(tend, long, lat, bs = c('cr', 'ds'), d = c(1, 2), k = c(5, 5)) +
-        ti(Year, long, lat, bs = c('cr', 'ds'), d = c(1, 2), k = c(5, 5)),
-   data = freeze.na,
-   method = 'fREML', # fast restricted marginal likelihood
-   engine = 'bam',   # use mgcv::bam() for faster fitting
-   discrete = TRUE)  # discretize the posterior for faster fitting
+       s(tend, bs = 'cr', k = 10) +
+       s(year, bs = 'cr', k = 10) +             
+       s(tend, lake, bs = 'fs', k = 10) +     
+       s(Year, lake, bs = 'fs', k = 10) +     
+       s(long, lat, bs = 'ds', k = 20) +        
+       ti(tend, Year, bs = 'cr', k = c(5, 5)) +
+       ti(tend, long, lat, bs = c('cr', 'ds'), d = c(1, 2), k = c(5, 5)) +
+       ti(Year, long, lat, bs = c('cr', 'ds'), d = c(1, 2), k = c(5, 5)),
+     data = freeze.na,
+     method = 'fREML', # fast restricted marginal likelihood
+     engine = 'bam',   # use mgcv::bam() for faster fitting
+     discrete = TRUE)  # discretize the posterior for faster fitting
 ```
 
 \doublespacing
 
-The `bs` arguments indicate which basis type each smooth uses. Cubic regression splines (`cr`) are fast-fitting and one-dimensional splines composed of cubic polynomials. Factor smooths bases (`fs`) fit a penalized smooth for each `lake` factor, such that all smooths have a common smoothness parameter [@pedersen_hierarchical_2019]. Duchon splines (`ds`) are two-dimensional splines that avoid excessive spatial extrapolation [i.e. they are well-behaved as they move away from the support of the data, see @dold_splines_1977].
+The `bs` arguments indicate which basis type each smooth uses. Cubic regression splines (`cr`) are fast-fitting, one-dimensional splines composed of cubic polynomials. Factor smooths bases (`fs`) fit a penalized (thin-plate) smooth for each `lake` factor, such that all smooths have a common smoothness parameter [@pedersen_hierarchical_2019]. Duchon splines (`ds`) are two-dimensional splines that avoid excessive spatial extrapolation [i.e. they are well-behaved as they move away from the support of the data, see @dold_splines_1977].
 
-The `k` argument sets the maximum complexity of the smooth term, such that the maximum number of degrees of freedom is $k - 1$. Note that `k = c(a, b)` in the `ti` terms indicates that the maximum effective degrees of freedom $(a - 1)(b - 1)$.
+The `k` argument sets the maximum complexity of a smooth term, such that the maximum number of degrees of freedom is $k - 1$. Note that `k = c(a, b)` in the `ti` terms indicates that the maximum effective degrees of freedom is $(a - 1)(b - 1)$.
 
-Finally, the `method` argument indicates that the smoothness parameter should be estimated using restricted marginal likelihood, while `engine = 'bam'` indicates that `mgcv::bam()` should be used and `discrete = TRUE` discretizes the posterior to decrease computational cost and fitting time [@wood_fast_2011]. The structure of the thaw model is essentially identical, with the exception that the response $Y$ is 0 if the lake is frozen and 1 if the lake is ice-free, given that it was previously frozen.
+Finally, the `method` argument indicates that the smoothness parameter should be estimated using fast REstricted Marginal Likelihood, while `engine = 'bam'` indicates that `mgcv::bam()` should be used and `discrete = TRUE` discretizes the model's covariates to decrease computational cost and fitting time [@wood_fast_2011]. The structure of the thaw model is essentially identical, with the exception that the response is 0 if the lake is (still) frozen and 1 if the lake is ice-free, given that it was previously frozen.
 
 (Since the `pamm` function from the `pammtools` package is a wrapper function for the `gam` and `bam` functions from the `mgcv` package, one could also use `mgcv::bam` or `mgcv::gam` instead of `pammtools::pamm`, but in that case `family = poisson()` and the `offset` argument need to be specified.)
 
 # Results
 
-The results from the HPAMs fit to the North American and Eurasian datasets are shown in Figures \@ref(fig:hpam-temporal) through \@ref(fig:spatial-thaw). Since 1950, the average cumulative probability of freezing decreased in both continents, while the cumulative probability of thawing increased. On average, Eurasian lakes in 2010 froze 5.5 days later and thawed 5.5 days earlier than in 1950, while North American lakes in 2010 froze 33 days later and thawed 10 days earlier than in 1950 (Figure \@ref(fig:hpam-temporal)). Most of the change in $\widehat F_{freeze}(t)$ and $\widehat F_{thaw}(t)$ occurred after 1995, when data was available for only 36% of the lakes in the dataset, and the great majority of them were in the Great Lakes Area and Northern Europe (Figure \@ref(fig:lake-map)).
+```{r, eval=FALSE, echo=FALSE}
+library('readr')
+library('dplyr')     # makes data editing easier
+library('pammtools') # tools for Piecewise-exponential Additive Mixed Models
+library('survival')  # survival analysis functions
 
-```{r hpam-temporal, fig.cap='Estimated cumulative hazard (a, b) and cumulative probability (c, d) of lakes being frozen (left) or thawed (right) while assuming an average effect of geographic location.', cache=TRUE}
+ice <- read_rds(here::here('data/lake-ice-data.rds')) %>%
+  rename(Year = year) %>%
+  filter(Year >= 1950) %>%
+  mutate(continent = if_else(long > -30, 'Eurasia', 'North America'))
+ice.na <- filter(ice, continent == 'North America')
+ice.eura <- filter(ice, continent == 'Eurasia')
+freeze.eura <-
+  select(ice.eura, lake, Year, froze.bool, On.date, On.DOY, On.DOY.jul,
+         long, lat) %>%
+  as_ped(formula = Surv(time = On.DOY.jul,
+                        event = froze.bool) ~ .)
+freeze.na <-
+  select(ice.na, lake, station, Year, froze.bool, On.date, On.DOY, On.DOY.jul,
+         long, lat) %>%
+  as_ped(formula = Surv(time = On.DOY.jul,
+                        event = froze.bool) ~ .)
+thaw.eura <-
+  select(ice.eura, lake, station, Year, froze.bool, Off.date, Off.DOY,
+         Off.DOY.oct, long, lat) %>%
+  as_ped(formula = Surv(time = Off.DOY.oct,
+                        event = froze.bool & !is.na(Off.DOY.oct)) ~ .)
+thaw.na <-
+  select(ice.na, lake, station, Year, july.year, froze.bool, Off.date, Off.DOY,
+         Off.DOY.oct, long, lat) %>%
+  as_ped(formula = Surv(time = Off.DOY.oct,
+                        event = froze.bool & !is.na(Off.DOY.oct)) ~ .)
+pam.freeze.na <- read_rds('analysis/models/pam-freeze-na4.rds')
+pam.freeze.eura <- read_rds('analysis/models/pam-freeze-eura4.rds')
+# pam.thaw.na <- read_rds('analysis/models/pam-thaw-na4.rds')
+pam.thaw.eura <- read_rds('analysis/models/pam-thaw-eura4.rds')
+
+years <- c(1950, 1995, 2010) # years for predictions
+
+pred.freeze.na.year <- 
+  make_newdata(freeze.na,
+               tend = unique(tend),
+               Year = years) %>%
+  filter(tend <= 230, tend >= 140) %>%
+  group_by(Year) %>%
+  add_surv_prob(pam.freeze.na, terms =c('s(tend)','s(Year)','ti(tend,Year)'))
+# pred.thaw.na.year <-
+#   make_newdata(thaw.na,
+#                tend = unique(tend),
+#                Year = years) %>%
+#   filter(tend <= 230, tend >= 140) %>%
+#   group_by(Year) %>%
+#   add_surv_prob(pam.thaw.na, terms = c('s(tend)','s(Year)','ti(tend,Year)'))
+pred.freeze.eura.year <- 
+  make_newdata(freeze.eura,
+               tend = unique(tend),
+               Year = years) %>%
+  filter(tend <= 230, tend >= 140) %>%
+  group_by(Year) %>%
+  add_surv_prob(pam.freeze.eura,terms=c('s(tend)','s(Year)','ti(tend,Year)'))
+pred.thaw.eura.year <- 
+  make_newdata(thaw.eura,
+               tend = unique(tend),
+               Year = years) %>%
+  filter(tend <= 230, tend >= 140) %>%
+  group_by(Year) %>%
+  add_surv_prob(pam.thaw.eura, terms =c('s(tend)','s(Year)','ti(tend,Year)'))
+
+group_by(pred.thaw.na.year, Year) %>%
+  mutate(x = min(abs(surv_prob - 0.5))) %>%
+  filter(abs(surv_prob - 0.5) == x) %>%
+  select(tend, Year, surv_prob)
+
+# North America
+# Year freeze thaw   p.f   p.t c.f c.t
+# 1950    153  222 0.509 0.490 --- ---
+# 1995    159  223 0.499 0.482 + 6 + 1
+# 2010    178  212 0.503 0.505 +25 -10
+
+# Eurasia
+# Year freeze thaw   p.f   p.t c.f c.t
+# 1950    147  223 0.502 0.490 --- ---
+# 1995    148  224 0.515 0.482 + 1 + 1
+# 2010    164  220 0.507 0.505 +17 - 3
+
+rm(freeze.eura, freeze.na, ice, ice.eura, ice.na, pam.freeze.eura,
+   pam.freeze.na, pam.thaw.eura, pred.freeze.eura.year, pred.freeze.na.year,
+   pred.thaw.eura.year, pred.thaw.na.year, thaw.eura, thaw.na, years)
+```
+
+The results from the HPAMs fit to the North American and Eurasian datasets are shown in Figures \@ref(fig:hpam-temporal) through \@ref(fig:spatial-thaw). Since 1950, the average cumulative probability of freezing decreased in both continents, while the cumulative probability of thawing increased. On average, Eurasian lakes in 2010 froze 17 days later and thawed 3 days earlier than in 1950, while North American lakes in 2010 froze 25 days later and thawed 10 days earlier than in 1950 (Figure \@ref(fig:hpam-temporal)). Most of the change in $\widehat F_{freeze}(t)$ and $\widehat F_{thaw}(t)$ occurred after 1995, when data was available for only 36% of the lakes in the dataset, and the great majority of them were in the Great Lakes Area and Northern Europe (Figure \@ref(fig:lake-map)). With respect to the average 1950 dates, in 1995 lakes in North America froze 6 days later and thawed 1 day later, while lakes in Eurasia froze and thawed a day later.
+
+```{r hpam-temporal, fig.cap='Estimated cumulative hazard (a, b) and probability (c, d) with 89% credible intervals of lakes being frozen (left) or thawed (right) while assuming an average effect of geographic location.', cache=TRUE}
 knitr::include_graphics('../plots/p-freeze-thaw.pdf')
 ```
 
-The high smoothness of the `year` factor smooths in each of the four models (Figure \@ref(fig:fs-terms)a) indicates that the trend in $\widehat \lambda(t)$ over the years is close to the average (`s(year)`), once the effects of space and `tend` are accounted for. In contrast, the high spread of the `tend` factor smooths (Figure \@ref(fig:fs-terms)b) indicates that there are strong drivers of seasonal variation that are not accounted for by the models.
+The high smoothness and horizontality of the `year` factor smooths in each of the four models (Figure \@ref(fig:fs-terms)a) indicates a strong common trend in $\widehat \lambda(t)$ over the years with little deviation from the gloval term (`s(year)`) after accounting for the effects of space and `tend`. In contrast, the high spread of the `tend` factor smooths (Figure \@ref(fig:fs-terms)b) indicates that there are strong drivers of seasonal variation that are not accounted for by the models.
 
-```{r fs-terms, fig.cap='Factor smooths (`fs`) of `year` (b) and `tend` (a) from the HPAMs for the hazard of freezing and thawing in North America and Eurasia. The y axis indicates how much the hazard of each lake deviated from the mean trend, assuming Gaussian random effects of lake.', cache=TRUE, fig.align='center'}
+```{r fs-terms, fig.cap='Factor smooths (\\code{fs}) of \\code{year} (b) and \\code{tend} (a) from the HPAMs for the hazard of freezing and thawing in North America and Eurasia. The y axis indicates how much the hazard of each lake deviated from the mean trend, assuming Gaussian random effects of \\code{lake}.', cache=TRUE, fig.align='center'}
 knitr::include_graphics('../plots/hpam-fs.pdf')
 ```
 
-When accounting for the spatial effects in the predictions, the trends are not spatially uniform or monotonic. Areas in Western and Northern North America were estimated to have much later freezing dates (or not freeze at all) in 2010, whith most of the change occurring after 1995, while freeze dates in the Eastern US did not change substantially. European lakes were estimated to have frozen somewhat earlier in 1995 than in 1950 but have frozen three weeks later in 2010. Asian lakes froze somewhat later in 1995 but sligthly earlier in 2010, compared to the 1950 dates (Figure \@ref(fig:change-in-dates)a). The North American thaw model estimated an earlier thaw of about 1-2 months in north-western Canada by 2010 and a 10-day shift towards later thaw in the Eastern US. Overall, the Eurasian model estimated little to no changes in thaw dates in 1995, followed by a widespread seven-day shift to earlier thawing in 2010, with the exception of Eastern Asia, where lakes thawed a week later on average.
+```{r, echo = FALSE, eval = FALSE}
+library('dplyr')
+lakes <- readRDS('../data/lake-ice-data.rds') %>%
+  filter(year >= 1950) %>%
+  mutate(continent = if_else(long > -30, 'Eurasia', 'North America')) %>%
+  filter(! duplicated(station)) %>%
+  select(lake, station, long, lat)
+organize.dates <- function(pred, d) {
+  pred <-
+    ungroup(pred) %>%
+    mutate(stat = case_when(stat == 'lwr' ~ 'Lower 89% CI',
+                            stat == 'p' ~ 'Estimate',
+                            stat == 'upr' ~ 'Upper 89% CI'),
+           stat = factor(stat,levels = c('Lower 89% CI', 'Estimate',
+                                         'Upper 89% CI')))
+  pred <- filter(pred,
+                 ! mgcv::exclude.too.far(pred$long, pred$lat,
+                                         lakes$long, lakes$lat,
+                                         dist = 0.1))
+  pred
+}
+diff.dates <- function(d) {
+  d %>%
+    filter(stat == 'Estimate') %>%
+    select(long, lat, Year, tend) %>%
+    mutate(Year = paste0('y.', Year)) %>%
+    tidyr::pivot_wider(names_from = 'Year', values_from = tend) %>%
+    mutate(`1995` = y.1995 - y.1950,
+           `2010` = y.2010 - y.1950) %>%
+    tidyr::pivot_longer(cols = c('1995', '2010'), names_to = 'year',
+                        values_to = 'diff') %>%
+    select(year, long, lat, diff)
+}
 
-<!-- Note that since the thaw model estimates the probability of thawing given that the lake was previously frozen, it is reasonable to expect somewhat smaller changes than with the freeze models in areas where lakes do not always freeze, since years where lakes froze are more likely to have colder winters and later thaw dates, while warmer years in which lakes did not freeze are excluded from the thaw models. -->
+na.f.diff <-
+  readRDS('../analysis/plots/predictions/pred-na-f.rds') %>%
+  organize.dates(freeze.na) %>%
+  diff.dates() %>%
+  group_by(year)
+eura.f.diff <-
+  readRDS('../analysis/plots/predictions/pred-eura-f.rds') %>%
+  organize.dates(freeze.eura) %>%
+  diff.dates() %>%
+  group_by(year)
+na.t.diff <-
+  readRDS('../analysis/plots/predictions/pred-na-t.rds') %>%
+  organize.dates(thaw.na) %>%
+  diff.dates() %>%
+  group_by(year)
+eura.t.diff <-
+  readRDS('../analysis/plots/predictions/pred-eura-t.rds') %>%
+  organize.dates(thaw.eura) %>%
+  diff.dates() %>%
+  group_by(year)
+
+diff.summary <- function(d) {
+  summarize(d,
+            mean = mean(diff),
+            sd = sd(diff),
+            q01 = quantile(diff, 0.25),
+            q50 = median(diff),
+            q99 = quantile(diff, 0.75),
+            iqr = IQR(diff))
+}
+
+diff.summary(na.f.diff)
+diff.summary(filter(eura.f.diff, long < 30)) # Europe only, west of Kyiv
+diff.summary(filter(eura.f.diff, long > 30)) # Asia only, east of Kyiv
+```
+
+When accounting for the spatial effects in the predictions, the trends are not spatially uniform or monotonic. Overall, European and Western and Northern North American lakes had the greatest shift to later freeze dates, and the majority of the change occurred after 1995. With respect to the average freezing dates in 1950, lakes in 1995 froze 2-7 days later in North America, 1-3 days earlier in Europe, and 3-5 days later in Asia and Russia (Figure \@ref(fig:change-in-dates)a). In contrast, lakes in 2010 in North America and Europe are much larger and more variable, relative to the average 1950 dates. North American lakes are estimated to have frozen 12-120 days later (IQR = 111 days). European lakes (excluding Russian lakes) are estimated to have frozen 19-31 days later with an average of 25 days later (IQR = 12 days), but Russian and Asian lakes are not expected to have frozen much earlier or later (mean: - 3 days, IQR = 6 days).
+
+```{r, eval = FALSE, echo = FALSE}
+diff.summary(filter(na.t.diff, long > -95, lat > 46, lat < 65)) # eastern Canada
+diff.summary(filter(na.t.diff, (long < -95 & lat > 46) | lat > 65)) # W+N Canada
+diff.summary(filter(na.t.diff, long > -95, lat < 46)) # eastern US
+diff.summary(filter(eura.t.diff, long < 120)) # west of Shanghai 
+diff.summary(filter(eura.t.diff, long > 120)) # east of Shanghai
+```
+
+The patterns estimated by the thaw models are similar to the trends in freeze dates but more spatio-temporally uniform (and in the opposite direction). Relative to 1950, lakes in eastern Canada thawed 3-7 days later in 1995 but 4-16 days earlier in 2010. In the rest of Canada, lakes are estimated to have thawed 3-12 earlier in 1995 and 1-2 months earlier in 2010 (median = -38). In contrast, lakes in the United States thawed 1-4 days later in 1995 and 6-19 days later in 2010. Eurasian lakes thawed 0-8 days earlier in 1995 and 4-11 days earlier in 2010, with the exception of eastern Asian lakes, which thawed 2-8 days later in 1995 and 3-12 days later in 2010.
+
+<!-- Note that since the thaw model estimates the probability of thawing given that the lake was previously frozen, it is reasonable to expect somewhat smaller changes than with the freeze models in areas where lakes do not always freeze, since years in which lakes froze are more likely to have colder winters and later thaw dates, while warmer years in which lakes did not freeze are excluded from the thaw models. -->
 
 ```{r change-in-dates, fig.cap='Estimated change in the average freeze (a) and thaw (b) dates relative to 1950. Areas in black were estimated to have an absolute change greater than 50 days. 1995 was chosen as a midpoint between the beginning and the end of the record because a large portion of the records ended in 1994 and 1995.', cache=TRUE, fig.align='center', out.height='90%'}
 knitr::include_graphics('../plots/hpam-change-in-dates.pdf')
@@ -246,47 +437,43 @@ knitr::include_graphics('../plots/hpam-spatial-thaw.pdf')
 
 # Discussion
 
-The widespread shift to later freezing and earlier thawing dates has greatly changed the lives of many many people, including those of Indigenous People in Northern Canada and Alaska. Many First Nations report a reduction in food and energy security as well as major changes to traditional activities [@golden_blue-ice_2015]. Many of these communities rely on (lake) ice roads as a means of travel and transportation between communities and to obtain food and resources, and they have a deep spiritual and emotional connection with the seasonal freezing of lakes, since many of their traditional activities and cultural views are deeply connected with the formation of lake ice, particularly "blue ice" [@golden_blue-ice_2015]. Blue ice occurs in coastal and sloped locations when winds are sufficiently strong and persistent to cause the surface of the ice to melt and re-freeze slowly. The slow freezing process and the ablation cause the gas bubbles commonly present in ice to escape, which results in more "pure" ice with the characteristic blue hue [@winther_blue-ice_2001]. The disappearance of blue ice has been suggested as an indicator of the rate of climate change [@orheim_investigating_1990; @walsh_global_1998], and the absence of blue ice in lakes has been linked to a decrease in strength and reliability of ice roads [@golden_blue-ice_2015]. In addition, youth, particularly Indigenous youth, have expressed stress due to changes in climate and loss of ice [@petrasek_macdonald_necessary_2013].
+The widespread shift to later freezing and earlier thawing of lakes has greatly changed the lives of many many people, including those of Indigenous People in Northern Canada and Alaska. As a consequence, many First Nations report a reduction in food and energy security as well as major changes to traditional activities [@golden_blue-ice_2015]. Many of these communities rely on (lake) ice roads as a means of travel and transportation between communities and to obtain food and resources. The loss of lake ice has also resulted in deep spiritual and emotional damage, since many of Indigenous traditional activities and cultural views are deeply connected with the formation of lake ice, particularly "blue ice" [@golden_blue-ice_2015]. <!--Blue ice occurs in coastal and sloped locations when winds are sufficiently strong and persistent to cause the surface of the ice to melt and re-freeze slowly. The slow freezing process and the ablation cause the gas bubbles commonly present in ice to escape, which results in more "pure" ice with the characteristic blue hue [@winther_blue-ice_2001].--> The disappearance of blue ice has been suggested as an indicator of the rate of climate change [@orheim_investigating_1990; @walsh_global_1998], and the absence of blue ice in lakes has been linked to a decrease in strength and reliability of ice roads [@golden_blue-ice_2015]. In addition, youth, particularly Indigenous youth, have expressed stress due to changes in climate and loss of ice [@petrasek_macdonald_necessary_2013].
 
-Lake ice loss has also had a strong impact on the lives of many Eurasian people. Religious practices such as the transferring of a statue of John the Apostle across Lake Constance (central Europe) or the Shinto purification rituals on Lake Suwa (Japan) are unlikely to occur in the coming years [@knoll_consequences_2019]. Changes in lake ice phenology have also caused severe damage to the economies of many nations. Ice fishing on Lake Peipsi, Estonia, attracts as many as 3000 anglers on a single weekend, and it is an important source of income and food for many people [@orru_recreational_2014], but the amount of fish that is caught each year can vary by as much as a factor of 10 due to variable ice conditions [@orru_recreational_2014]. In Northern Europe, the unpredictability of lake ice has lead to the cancellation of many skating events and competitions, including the Swedish "Viking ride", a long-distance skating race that was held annually from 1999 until 2018 [@knoll_consequences_2019].
+Lake ice loss has also had a strong impact on the lives of many Eurasian people. Religious practices such as the transferring of a statue of John the Apostle across Lake Constance (central Europe) or the Shinto purification rituals on Lake Suwa (Japan) are unlikely to occur in the coming years [@knoll_consequences_2019]. Changes in lake ice phenology have also caused severe damage to the economies of many nations. For instance, ice fishing on Lake Peipsi, Estonia, has attracted as many as 3000 anglers on a single weekend, and it is an important source of income and food for many people [@orru_recreational_2014]. However, the amount of fish that is caught each year can vary by as much as a factor of 10 due to variable ice conditions [@orru_recreational_2014]. In Northern Europe, the unpredictability of lake ice has lead to the cancellation of many skating events and competitions, including the Swedish "Viking ride", a long-distance skating race that was held annually from 1999 until 2018 [@knoll_consequences_2019].
 
-***linebreak***
+\
 
-Despite the low data availability after 1995, the estimates produced by the models agree with recently published results [e.g. @brown_fate_2011], but the time-to-event approach and the model's nonlinearity allowed for finer spatiotemporal detail. The large number of lakes in the dataset and their wide spatial range allowed informed estimates of the daily hazard of freezing or thawing for the majority of the two continents while providing a statistically sound measure of uncertainty. Although the data scarcity after 1995 resulted in a substantial increase in the uncertainty after 1995, the low degrees of freedom (`k`) in the spatial terms ensured that predictions would be sufficiently generalizable during the years with little data. While the estimated loss of ice in Western and Northern Canada may seem excessive, the 89% credible intervals still contain the estimates of recent peer-reviewed studies [e.g. @brown_fate_2011]. Additional data would produce more informed (and less uncertain) estimates, but the current estimates are not unreasonable.
+Despite the low data availability after 1995, the estimates produced by the models agree with recently published results [e.g. @brown_fate_2011]. However, the hierarchical and nonlinear time-to-event approach allowed for finer spatio-temporal detail. The large number of lakes in the dataset and their wide spatial range allowed informed estimates of the daily hazard of freezing or thawing for the majority of the two continents while providing a statistically sound measure of uncertainty and variance. Although the data scarcity after 1995 resulted in a substantial increase in the recent estimates' uncertainty, the low degrees of freedom (`k`) in the spatial terms ensured that predictions would be sufficiently generalizable during the years with little data. While the estimated loss of ice in Western and Northern Canada may seem excessive, the 89% credible intervals still contain the estimates of recent peer-reviewed studies [e.g. @brown_fate_2011]. Additional data would produce more informed (and less uncertain) estimates, but the current estimates are reasonable, and they show the accelerating trends estimated by others [@warne_geography_2020; ***additional refs***].
 
-The spatial term `s(long, lat)` and its tensor interaction terms (`ti(tend, long, lat)`, and `ti(Year, long, lat)`) decreased the potential bias that arised from the non-random and opportunistic nature of the sample of lakes. By accounting for the effect of space and how the effect changed over time, the model was able to estimate the changes in $\lambda(t)$ over time without assuming an equal change in all regions. Even in areas where data was scarce or unavailable, the model was still able to produce realistic estimates with a measure of uncertainty. The Duchon spatial spline appears to remain sufficiently constrained outside the spatial range of the data, even near the edges of the spatial range of the data. The tensor interaction terms `ti(tend, long, lat)`, and `ti(Year, long, lat)` allowed the estimated loss to increase at faster rates in areas where the change is accelerating (e.g. North-Western Canada, Scandinavia) and decrease in other areas (e.g. Eastern US and Eastern Asia). 
+The spatial term `s(long, lat)` decreased the potential bias from the non-random and opportunistic nature of the sample of lakes, while the Duchon splines remained sufficiently constrained outside the spatial range of the data. Allowing the long-term and seasonal trends to vary over space with the inclusion of spatio-temporal tensor product interaction terms (`ti(tend, long, lat)`, and `ti(year, long, lat)`), the models were able to estimate the changes in hazard over time without assuming trends that with the same magnitude, direction, and slope in all regions. Instead, the spatio-temporal `ti()` terms allowed the estimated loss to increase at faster rates in more northern regions (e.g. North-Western Canada, Scandinavia) and decrease in other areas (e.g. Eastern United States and Eastern Asia). Allowing `s(year)` and `s(tend)` to vary over space ensured that the models would be able to produce realistic estimates (with measures of uncertainty) even in areas where data was scarce or unavailable after 1995.
 
-While the estimated effect of `year` after 1995 is driven mostly by lakes in the Great Lakes Area and Scandinavia, the spatial bias in data availability was reduced substantially by allowing `s(year)` and `s(tend)` to vary over space. Without the spatial terms, the models would likely have produced substantially different results. Without any information about the (marginal and partial) effects of space, the models would only estimate the average change in $\widehat \lambda(t)$ over time and would lack any information on the spatial distribution of the lakes.
+Without the spatial terms, the models would likely have produced substantially different results. Without any information about the (marginal and partial) effects of space, the models would only estimate the average change in hazard over time and would lack any information on the spatial distribution of the lakes and the effects of latitude and continentality on climate. While the spatial effect would be partially accounted for by the random effects in the `fs` terms of `year` and `tend`, such terms are not appropriate for estimating the full effect of location, as they are best for (relatively small) amounts of stochastic variation, rather than large, deterministic, and spatially autocorrelated effects. Still, a simple HPAM with smooths of `tend` and `year`, i.e.
 
-While a part of the spatial effect would be accounted for by the random effects in the `fs` terms of `year` and `tend`, `fs` terms are not appropriate for estimating the full effect of location, as they are best for (relatively small) amounts of stochastic variation, rather than large, deterministic, and spatially autocorrelated effects. Still, a simple HPAM with smooths of `tend` and `year`, i.e.
-
+<!-- \singlespacing -->
 \begin{equation} \label{basic-hpam}
 \log \left[ \widehat\lambda(t) \right] = f_1(year) + f_2(tend) + \epsilon,
 \end{equation}
+<!-- \doublespacing -->
 
-would likely still produce a better estimate of the common temporal trends than an ensamble of individual models. This is because the hierarchical model would produce a single posterior distribution for `s(tend)` and `s(year)` using a single common likelihood function for all lakes. This way, the model would contain information about the variation between lakes that cannot be explained without information on the spatial location of the lakes, or other characteristics such as lake depth and area.
+would likely still produce a better estimate of the common temporal trends than an ensamble of individual models. This is because the hierarchical model would produce a single posterior distribution for `s(tend)` and `s(year)` using a single common likelihood function for all lakes. This way, the model would contain information about the variation between lakes due to the spatial location of the lakes and other characteristics such as lake morphology. The estimated coefficients would also be conditional on the entirety of the dataset rather than a single lake, so they would be more statistically meaningful than the average of many individual models which lack any information on differences between lakes. Averaging the coefficients of sigle-lake models would thus fail to provide any information on the spatial heterogeneity of lake ice loss, and it would not be possible to reasonably extrapolate for lakes which are not in the dataset.
 
-In addition, estimating the average trends from multiple models would prove rather difficult and likely inapproriate. While estimating the average coefficients of linear models would be mathematically simple, these estimates are unable to account for any nonlinearity in the trends, such as the accelerating warming of lakes [@velicogna_increasing_2009; @zhong_recent_2016].
+Averaging linear coefficients from multiple linear models [e.g. @warne_geography_2020] is particularly inefficient, since although it would be mathematically simple, the estimates are unable to account for any nonlinearity in the trends, such as the accelerating warming of lakes [@velicogna_increasing_2009; @zhong_recent_2016].
 
-Estimating the average change in $\widehat \lambda(t)$ or $\widehat F(t)$ (or the average freezing date) using linear models and then estimating the average coefficients [e.g. @warne_geography_2020], prevents the model from accounting for the between-lake variation that arises due to lake depth, area and spatial location. In addition, assuming linear trends prevents the model from estimating any acceleration in the loss of ice.
+Hierarchical Generalized Additive Models (HGAMs) and, more specifically, Hierarchical Piece-wise exponential Additive Models (HPAMs) are particularly effective and appropriate models for analyzing lake ice phenology data at a regional and global scale, since they can account for (1) nonlinear effects, (2) multiple lakes in a single model, (3) the spatial relationship between lakes, and (4) interactions between smooth terms via tensor product interaction terms. Ultimately, however, the accuracy and precision of any model depend on data availability.
 
-A hierarchical, nonlinear model which accounts for the effects of space and how the yearly and seasonal trends change over space is best suited for estimating changes in lake ice phenology, as it relaxes many assumptions that are likely problematic, and it avoids post-hoc estimates of average trends. However, the accuracy of any model depends on the data to which it is fit, so even the models presented in this paper could be improved.
+An increase in data, particularly in periods and regions with low data availability or with complex and accelerating trends, would reduce the uncertainty in the estimates and the potential bias. However, the hierarchical approach used here allows the models to produce reasonable and well-informed predictions even with fragmented and short records. Since the models account for the spatial relationship and variance between lakes, multiple short time series (e.g. 2-5 years) from low-data areas would likely have a more appreciable effect on the models than few but long time series. By incorporating the spatial relationship between lakes into the models, spatial and temporal gaps in the data can be filled using information from nearby lakes. Thus, even small data contributions can greatly improve hierarchical models such as those presented here.
 
-An increase in data, particularly post 1995 and in areas with low data availability, would reduce the uncertainty in the estimates and the potential bias in the temporal marginal smooths (i.e. `s(tend)` and `s(year)`). In addition, since each model is fit to all data from the relative continent simultaneously, the observations do not need to be many years in length. Multiple short time series (e.g. 2-5 years) from low-data areas would likely have a more appreciable effect on the models than few but long time series. By incorporating space into the models, spatial and temporal gaps in the data can be filled using data from nearby lakes. Thus, even small data contributions can greatly improve hierarchical models such as those presented here.
+With the recent increase in open and "big data", it is imperative that large datasets such as the GLRIPD be analyzed using hierarchical methods. Failing to use hierarchical methods ultimately forfeits a large portion of the value that comes with such large, and spatially and temporally diverse datasets.
 
-With the recent increase in open and "big data", it is imperative that large datasets such as the GLRIPD be analyzed using hierarchical methods. Failing to use hierarchical methods ultimately forfeits a large portion of the value that comes with datasets of this size.
+Model accuracy and precision could also be improved by adding predictors to the models. Predictors with a strong effect, such as lake elevation would account for the earler freezing and later thawing of lakes at higher altitudes, and it can also offset the underreppresentation of lakes at low altitudes, which do not freeze often. Although lake altitude was present in the GLRIPD, it was unavailable for a large amount of the lakes, so it was not included in the models. We hope to include lake elevation in future versions of the models, whether the missing values are entered manually or are estimated using functions such as the `GNgtopo30()` function from the `geonames` package [version 0.999; @rowlingson_geonames_2019], which estimates altitude using the `GTOPO30` global digital elevation model [@earth_resources_observation_and_science_eros_center_global_2017].
 
-Besides adding more rows of data (i.e. more observations), models can also be improved by including more columns of data (i.e. predictors) in the models. Lake elevation would account for the earler freezing and later thawing of lakes at higher altitudes, and it can also offset the underreppresentation of lakes that do not freeze often (such as lakes at low altitudes). Although lake altitude was present in the GLRIPD, it was not available for a large amount of the lakes, so it was not included in the models. We hope to include lake elevation in future versions of the models, whether the missing values are entered manually or are estimated using functions such as the `GNgtopo30()` function from the `geonames` package [version 0.999; @rowlingson_geonames_2019], which estimates altitude using the `GTOPO30` global digital elevation model [@earth_resources_observation_and_science_eros_center_global_2017].
+Other variables such as lake depth and surface area would also help explain a portion of the unexplained seasonal variation between lakes [@shuter_empirical_2013 and @magee_effects_2017]. Currently, these effects and other stochastic effects (e.g. wind disturbance and snow cover) are accounted for as random between-lake variation by the factor smooths of `tend` and `year`, since they likely affect the seasonal trends in freezing and thawing hazard, and shallower and larger lakes appear to be more resilient to loss of ice [@warne_geography_2020].
 
-Other variables such as lake depth and surface area would also help explain a portion of the unexplained seasonal variation between lakes [@shuter_empirical_2013 and @magee_effects_2017]. Currently, these effects and other stochastic effects (e.g. wind disturbance, snow cover) are accounted for as random between-lake variation by the factor smooths of `tend` and `year`, since they likely affect the seasonal trends in $\widehat \lambda_{freeze}(t)$ and $\widehat \lambda_{thaw}(t)$, and shallower and larger lakes appear to be more resilient to loss of ice.
-
-The explanatory power of the models could also be increased by accounting for the exposure to above-zero or sub-zero temperatures. The smooth of air temperature could also be lagged or smoothed to account for delays in the effect. However, additional care should be taken to ensure the collinearity of air temperature with `year`, `tend`, and space is not excessive. Ultimately, the model should be designed to address the question of interest. While the addition of a smooth of air temperature would likely increase the predictive power of the models, the models would no longer be appropriate for estimating whether lake ice cover is changing over time, since they estiamte the changes in lake ice over time once the effect of air temperature is accounted for. If the main interest is to estimate the loss of lake ice over time, then it may be counterproductive to include time-varying variables in the model, such as air temperature and wind disturbance. Instead, the models should only have smooths for `year`, `tend`, and variables that can be assumed to be time-invariant (i.e. uncorrelated) during the period of analysis, such as lake depth and surface area.
+The explanatory power of the models could also be increased by accounting for the exposure to above-zero or sub-zero temperatures. The air temperature term could also be lagged or smoothed to account for delays in the effect. However, additional care should be taken to ensure the collinearity of air temperature with `year`, `tend`, and space is not excessive. Ultimately, the model should be designed to address the question of interest. While the addition of a smooth of air temperature would likely increase the predictive power (and R$^2$) of the models, the models may no longer be appropriate for estimating whether lake ice cover is changing over time, since they estimate the changes in lake ice over time once the effect of air temperature is accounted for. If the main interest is to estimate the loss of lake ice over time, then it may be counterproductive to include time-varying and cyclical variables in the model, such as air temperature and wind disturbance. Instead, the models should only have smooths for `year`, `tend`, and variables that can be assumed to be uncorrelated with time during the period of analysis, such as lake depth, surface area, and geographic location.
 
 # Conclusion
 
-There is currently little understanding about the large-scale effects of the loss of lake ice on biological systems, but the damage to many people's lifestyle, traditions and economy are evident. To appropriately estimate changes in lake ice phenology, it is necessary to use smooth, hierarchical, and flexible models such as those presented in this paper to allow the trends to vary spatio-temporally. While many different types of modelling approaches are available, it is important to design the models according to the question that is being adressed.
-
-The results presented here demonstrate a widespread and accelerating but heterogeneous shift towards later freezing and earlier thaw, but also an increase in lake ice cover in some areas. The hierarchical structure of the models allowed us to estimate changes in lake ice in areas where little to no data were available.
+There is currently little understanding about the large-scale effects of the loss of lake ice on biological systems, but the damage to many people's lifestyle, traditions and economy are evident. Although some work has been done on the recent changes in lake ice phenology, the subject remains understudied, and there is a need for more statistically appropriate and efficient analysis. To appropriately estimate large-scale changes in lake ice phenology, it is necessary to use smooth, hierarchical, and flexible models which allow trends to vary spatio-temporally, such as the models presented in this paper. The hierarchical structure of the models allowed us to estimate complex and heterogenous spatio-temporal changes in lake ice, even when little to no data were available. The results presented here demonstrate a widespread and accelerating but heterogeneous change in lakes' freeze and thaw dates. Many large areas exhibit a shift towards later freezing and earlier thawing which has caused substantial cultural, spiritual, and economic loss to different People worldwide.
 
 \pagebreak
 
@@ -305,6 +492,5 @@ knitr::include_graphics('../plots/dates.pdf')
 # Code and data availability {-}
 
 All code and data used in this project can be found in its GitHub repository at https://github.com/simpson-lab/lake-ice-event-history-honours. The repository contains separate folders for the data, code, custom functions, and plots used in the project.
-
 
 # References {-}
