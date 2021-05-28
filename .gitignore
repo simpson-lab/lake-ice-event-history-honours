@@ -35,31 +35,15 @@ vignettes/*.pdf
 # Shiny token, see https://shiny.rstudio.com/articles/shinyapps.html
 rsconnect/
 
-# model backup files
-analysis/models/.model-backup
-
-# thesis reviews
-thesis/thesis-reviews
-
-# thesis references
-thesis/references
-
-# proposal and defensde-presentation should be skipped
-/defense-presentation/
-/proposal/
-
 # models
-analysis/models/gam-dur-eura-tw.rds
-analysis/models/gam-dur-eura-twlss2.rds
-analysis/models/gam-dur-na-tw.rds
-analysis/models/gam-dur-na-twlss2.rds
-analysis/models/pam-freeze-eura4.rds
-analysis/models/pam-freeze-na4.rds
-analysis/models/pam-thaw-eura4.rds
-analysis/models/pam-thaw-na4.rds
-analysis/models/stech-hurdle-gamma.rds
+analysis/models/*.rds
 
 # daily temperature files
 data/daily-weather
 data/daily-ncdc-noaa.R
 data/daily-weather-data.txt
+
+# additional Rmd files
+*.aux
+*.log
+*.out
