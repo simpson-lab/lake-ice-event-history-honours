@@ -15,6 +15,7 @@ library('mgcv')      # to fit GAMs
 # graphics
 library('ggplot2')   # fancy plots
 library('cowplot')   # ggplot in grids
+library('gridExtra') # for tables in ggplots
 
 # source functions
 source('functions/post.ref.date.R') # DOY => post Jun 30 / Sep 30
@@ -118,14 +119,17 @@ pred.freeze <-
          f.p.lwr = 1 - surv_lower,
          f.p.upr = 1 - surv_upper)
 
-# tile plot
-ggplot(pred.freeze, aes(tend, year, fill = freeze.prob)) +
+# tile plot of P(F) by year and ti
+ggplot(pred.freeze, aes(year, tend, fill = freeze.prob)) +
   geom_tile() +
-  scale_fill_viridis_c(expression(widehat(F)[freeze](t)))
+  scale_fill_distiller(expression(widehat(F)[freeze](t)), palette = 1,
+                       direction = 1) +
+  scale_x_continuous(NULL, expand = c(0, 0)) +
+  scale_y_continuous(june.lab, expand = c(0, 0))
 
 # P(frozen) by year
 plt.f.p.year <-
-  filter(pred.freeze, year %% 20 == 0) %>%
+  filter(pred.freeze, year %in% c(1950, 1980, 2010)) %>%
   mutate(year = factor(year)) %>%
   ggplot(aes(tend, freeze.prob, group = year)) +
   geom_line(aes(color = year), lwd = 1) +
@@ -165,6 +169,9 @@ plt.f.haz.year <-
   labs(x = june.lab, y = expression(widehat(Lambda)[freeze](t))) +
   scale_color_manual('Year', values = pal, aesthetics = c('color', 'fill')); plt.f.haz.year
 
+# ti term
+gratia:::draw.gam(pam.f, select = 3, dist = 1) # quite flat
+
 # smooth term of year
 freeze %>%
   make_newdata(tend = c(185), # January 1st
@@ -193,15 +200,16 @@ scatter.f.est <-
               alpha = 0.3) +
   geom_step(aes(year, doy), est, color = 'steelblue', lwd = 1); scatter.f.est
 
-d <- select(mendota, -c(off.date, off.doy, thawed, duration, off.doy.oct)) %>%
-  slice(1:10)
-
 plt <- plot_grid(scatter.f.est,
-                 gridExtra::tableGrob(d),
-                 plt.f.p.year, plt.f.p.tend,
+                 slice(freeze, 1:10) %>%
+                   select(-july.year) %>%
+                   relocate(year, .after = last_col()) %>%
+                   tableGrob(theme = 
+                               ttheme_default(padding = unit(c(3, 3), 'mm'))),
+                 plt.f.p.year, plt.f.p.tend, #plt.f.p.ti,
                  # plt.f.step.year,
                  #plt.f.haz.year,
                  ncol = 2,
                  labels = c('a.', 'b.', 'c.', 'd.'),
-                 rel_heights = c(1, 1, 1.1, 1.1))
-# save.plt(plt, 'mendota-freeze-viz.pdf', height = 3, width = 6.86, scale = 3)
+                 rel_heights = c(1, 1, 1.25, 1.25))
+# save.plt(plt, 'mendota-freeze-viz.pdf', height = 3.5, width = 6.86, scale = 2)
