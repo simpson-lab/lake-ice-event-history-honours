@@ -178,7 +178,7 @@ pred.freeze.tend <-
   bp.freeze %>%
   make_newdata(tend = seq_range(tend, n = 5),
                Year = seq_range(Year, by = 1)) %>%
-  group_by(tend) %>%
+  group_by(Year) %>%
   add_hazard(pam.bp.freeze, se_mult = qnorm(0.945)) %>%
   add_cumu_hazard(pam.bp.freeze, se_mult = qnorm(0.945)) %>%
   add_surv_prob(pam.bp.freeze, se_mult = qnorm(0.945)) %>%
