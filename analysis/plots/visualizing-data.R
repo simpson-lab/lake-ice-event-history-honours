@@ -40,15 +40,19 @@ WorldData <-
   fortify() %>%
   as_tibble()
 
-plt.map <-
+lakes <-
   group_by(ice, lake) %>%
   mutate(last = max(year),
          post1995 = case_when(last > 1995 ~ 'Yes',
                               last > 1950 ~ 'No',
                               TRUE ~ 'No data after 1950 (removed)') %>%
            factor(levels = c('Yes', 'No', 'No data after 1950 (removed)'))) %>%
-  filter(!duplicated(lake)) %>%
-  ggplot(aes(long, lat)) +
+  slice(1) %>%
+  ungroup() %>%
+  arrange(post1995)
+
+plt.map <-
+  ggplot(lakes, aes(long, lat)) +
   geom_map(map = WorldData, aes(group = group, map_id = region),
            data = WorldData, inherit.aes = FALSE, col = 'grey30',
            fill = 'grey90', size = 0.5) +
@@ -57,15 +61,16 @@ plt.map <-
                  size = post1995)) +
   scale_x_continuous(breaks = NULL) +
   scale_y_continuous(breaks = c(45, 62), labels = c('', '')) +
-  scale_color_manual('Data after 1995', values = pal[c(1:2, 7)]) +
-  scale_shape_manual('Data after 1995', values = c(19, 19, 4)) +
-  scale_alpha_manual('Data after 1995', values = c(0.5, 0.5, 1)) +
-  scale_size_manual('Data after 1995', values = c(0.75, 0.75, 1)) +
+  scale_color_manual('Data after 1995', values = pal[c(1, 3, 2)]) +
+  scale_shape_manual('Data after 1995', values = c(19, 19, 17)) +
+  scale_alpha_manual('Data after 1995', values = c(0.75, 0.75, 1)) +
+  scale_size_manual('Data after 1995', values = c(0.75, 0.75, 1.5)) +
   labs(x = NULL, y = NULL) +
   theme_minimal() +
   theme(legend.position = 'top') +
   guides(color = guide_legend(override.aes = list(alpha = 1, size = 1)))
-#save.plt(plt.map, 'lake-map.pdf', height = 8, width = 8)
+plt.map
+#save.plt(plt.map, 'lake-map.pdf', height = 4, width = 4, scale = 2)
 
 # only lakes with no data after 1950 
 group_by(ice, lake) %>%
@@ -204,11 +209,29 @@ plt.obs.dens.marg <-
             NULL, NULL,
             ggMarginal(plt.obs.dens.eura, type = 'histogram', fill = 'grey75'),
             NULL,
-            ncol = 3, labels = c(NA, 'a.', NA, NA, 'b.', NA),
+            ncol = 3, labels = c(NA, 'c.', NA, NA, 'd.', NA),
             rel_widths = c(0.1, 1, 0.1), label_x = - 0.05)
 plt.obs.dens.marg <- plot_grid(plt.obs.dens.marg, plt.obs.dens.legend,
                                ncol = 1, rel_heights = c(1, 0.1))
 #save.plt(plt.obs.dens.marg, 'obs-density.pdf', width = 8, height = 10)
+
+plt.hex <-
+  plot_grid(
+    NULL, # white space
+    # time series length
+    plot_grid(plt.lake.length.na, plt.lake.length.eura,
+              labels = c('a.', 'b.')) %>%
+      plot_grid(plt.lake.length.legend, ncol = 1, rel_heights = c(1, 0.1)),
+    NULL, # white space
+    # observation density
+    plot_grid(ggMarginal(plt.obs.dens.na, type = 'histogram', fill = 'grey75'),
+              ggMarginal(plt.obs.dens.eura, type = 'histogram', fill = 'grey75'),
+              labels = c('c.', 'd.')) %>%
+      plot_grid(plt.obs.dens.legend, ncol = 1, rel_heights = c(1, 0.1)),
+    NULL, # white space
+    ncol = 1, rel_heights = c(0.02, 1, 0.05, 1, 0.02))
+plt.hex
+#save.plt(plt.hex, 'ts-hex.pdf', width = 5, height = 5, scale = 2)
 
 # filter record to start in 1950
 ice <- filter(ice, year >= 1950)
