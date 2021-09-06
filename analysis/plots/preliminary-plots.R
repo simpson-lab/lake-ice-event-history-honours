@@ -106,10 +106,10 @@ plt.temp.branch <-
 ggMarginal(plt.temp.branch, margins = 'x', fill = 'grey')
 
 # freeze events by Year and DOY after june
-ice.sub <- subset(ice, Year >= start.year & Year %% 5 == 0 & !is.na(froze.bool)) %>%
+ice.sub <- subset(ice, year >= start.year & year %% 5 == 0 & !is.na(froze.bool)) %>%
   mutate(On.DOY.jul.plot = if_else(froze.bool, On.DOY.jul, -1))
 plt.dotplot.on <-
-  ggplot(ice.sub, aes(On.DOY.jul.plot, Year, col = froze.bool, alpha = froze.bool,
+  ggplot(ice.sub, aes(On.DOY.jul.plot, year, col = froze.bool, alpha = froze.bool,
                       shape = froze.bool)) +
   geom_point() +
   scale_color_manual('Froze', values = c('TRUE' = 'black', 'FALSE' = 'red'), labels = c('No', 'Yes')) +
@@ -123,7 +123,7 @@ plt.dotplot.on.h <- ggMarginal(plt.dotplot.on + theme(legend.position = 'none'),
 plt.dotplot.on.h
 
 # thaw events by Year and DOY after june
-plt.dotplot.off <- ggplot(ice.sub, aes(Off.DOY.oct, Year)) +
+plt.dotplot.off <- ggplot(ice.sub, aes(Off.DOY.oct, year)) +
   geom_point(alpha = 0.25, shape = 20) +
   labs(x = sept.lab, y = NULL)
 
@@ -136,7 +136,7 @@ plt.dotplot.on.off
 
 # freeze events by lake only
 plt.dotplot.lake <- ggplot(subset(ice, !is.na(froze.bool)),
-                           aes(Year, station, color = froze.bool), shape = 19) +
+                           aes(year, station, color = froze.bool), shape = 19) +
   geom_point(size = .25) +
   labs(x = NULL, y = NULL) +
   scale_y_discrete(breaks = NULL, expand = c(0.025, 0)) +
@@ -146,16 +146,16 @@ plt.dotplot.lake <- ggplot(subset(ice, !is.na(froze.bool)),
   theme(legend.position = 'top'); plt.dotplot.lake
 
 # density of freeze events
-plt.dens.freeze <- ggplot(subset(ice, Year %in% start.year:2005 & Year %% 10 == 0),
-                          aes(x = On.DOY.jul, y = factor(Year))) +
+plt.dens.freeze <- ggplot(subset(ice, year %in% start.year:2005 & year %% 10 == 0),
+                          aes(x = On.DOY.jul, y = factor(year))) +
   geom_density_ridges(fill = '#67a9cf') +
   labs(x = june.lab, y = NULL) +
   scale_y_discrete(expand = c(0, 1.5))
 plt.dens.freeze
 
 # density of thaw events
-plt.dens.thaw <- ggplot(subset(ice, Year %in% start.year:2005 & Year %% 10 == 0),
-                        aes(x = Off.DOY.oct, y = factor(Year))) +
+plt.dens.thaw <- ggplot(subset(ice, year %in% start.year:2005 & year %% 10 == 0),
+                        aes(x = Off.DOY.oct, y = factor(year))) +
   geom_density_ridges(fill = '#ef8a62') +
   scale_y_discrete(expand = c(0, 1.5)) +
   labs(x = sept.lab, y = NULL)
@@ -163,3 +163,4 @@ plt.dens.thaw
 
 # both density plots
 plt.dens <- plot_grid(plt.dens.freeze, plt.dens.thaw, labels = c('a.', 'b.')); plt.dens
+

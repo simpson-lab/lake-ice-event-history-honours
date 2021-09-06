@@ -4,7 +4,6 @@
 #install.packages('package-name')
 
 # data accessing
-library('here')      # for easier directory referencing, conflicts with lubridate::here
 library('readr')     # to read in files as tibbles
 
 # data editing
@@ -14,14 +13,13 @@ library('tibble')    # a tibble is a fancy data.frame
 # model fitting
 library('pammtools') # tools for Piecewise-exponential Additive Mixed Models
 library('mgcv')      # to fit GAMs
-library('brms')      # to fit censored Gamma HGAM
 library('survival')  # survival analysis functions
 
 # graphics
 library('ggplot2')   # fancy plots
 library('cowplot')   # ggplot in grids
 library('gratia')    # pretty GAM plots
-source(here::here('functions/save.plt.R')) # to save plots easily
+source('functions/save.plt.R') # to save plots easily
 
 # palette for plots
 pal <- c('#4477AA', '#ff8c00', '#66CCEE', '#009900',
@@ -57,8 +55,10 @@ pred.freeze.year <- bind_rows(mutate(pred.freeze.na, continent = 'North America'
 freeze.cumu <-
   ggplot(pred.freeze.year, aes(tend, cumu_hazard, col = factor(Year))) +
   facet_grid(continent ~ .) +
+  geom_ribbon(aes(x = tend, ymin = cumu_lower, ymax = cumu_upper,
+                  fill = factor(Year)), alpha = 0.1, inherit.aes = FALSE) +
   geom_line() +
-  scale_color_manual('Year', values = pal) +
+  scale_color_manual('Year', values = pal, aesthetics = c('color', 'fill')) +
   labs(x = june.lab, y = expression(widehat(Lambda)[freeze](t))) +
   theme(legend.position = 'top')
 
@@ -68,8 +68,7 @@ freeze.p <-
   geom_ribbon(aes(x = tend, ymin = p.lwr, ymax = p.upr, fill = factor(Year)),
               alpha = 0.1, inherit.aes = FALSE) +
   geom_line() +
-  scale_color_manual('Year', values = pal) +
-  scale_fill_manual('Year', values = pal) +
+  scale_color_manual('Year', values = pal, aesthetics = c('color', 'fill')) +
   labs(x = june.lab, y = expression(widehat(F)[freeze](t))) +
   theme(legend.position = 'top')
 
@@ -81,8 +80,11 @@ pred.thaw.year <- bind_rows(mutate(pred.thaw.na, continent = 'North America'),
 thaw.cumu <-
   ggplot(pred.thaw.year, aes(tend, cumu_hazard, col = factor(Year))) +
   facet_grid(continent ~ .) +
+  geom_ribbon(aes(x = tend, ymin = cumu_lower, ymax = cumu_upper,
+                  fill = factor(Year)), alpha = 0.1, inherit.aes = FALSE) +
   geom_line() +
-  scale_color_manual('Year', values = pal) +
+  scale_color_manual('Year', values = pal, aesthetics = c('color', 'fill')) +
+  coord_cartesian(ylim = c(0, 100)) +
   labs(x = sept.lab, y = expression(widehat(Lambda)[thaw](t))) +
   theme(legend.position = 'top')
 
@@ -92,8 +94,7 @@ thaw.p <-
   geom_ribbon(aes(x = tend, ymin = p.lwr, ymax = p.upr, fill = factor(Year)),
               alpha = 0.1, inherit.aes = FALSE) +
   geom_line() +
-  scale_color_manual('Year', values = pal) +
-  scale_fill_manual('Year', values = pal) +
+  scale_color_manual('Year', values = pal, aesthetics = c('color', 'fill')) +
   labs(x = sept.lab, y = expression(widehat(F)[thaw](t))) +
   theme(legend.position = 'top')
 
@@ -104,7 +105,7 @@ plt.ft <- plot_grid(freeze.cumu + theme(legend.position = 'none'),
                     freeze.p + theme(legend.position = 'none'),
                     thaw.p + theme(legend.position = 'none'),
                     labels = c('a.', 'b.', 'c.', 'd.'), ncol = 2)
-plt.ft <- plot_grid(leg.ft, plt.ft, rel_heights = c(0.1, 1), ncol = 1); plt.ft
+plt.ft <- plot_grid(leg.ft, plt.ft, rel_heights = c(0.1, 1), ncol = 1)
 #save.plt(plt.ft, 'p-freeze-thaw.pdf', height = 6.5)
 
 # factor smooths ####
