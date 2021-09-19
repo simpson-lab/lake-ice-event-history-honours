@@ -31,7 +31,6 @@ plot(1:length(pal), col = pal, cex = 5, pch = 15)
 
 # plot labels
 june.lab <- expression(Days~after~June~30^{th})
-sept.lab <- expression(Days~after~September~30^{th})
 
 # Import and process data ####
 # https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-ntl.33.35
@@ -201,7 +200,8 @@ scatter.f.est <-
   geom_step(aes(year, doy), est, color = 'steelblue', lwd = 1); scatter.f.est
 
 plt <- plot_grid(scatter.f.est,
-                 slice(freeze, 1:10) %>%
+                 freeze %>%
+                   filter(year == 1976) %>%
                    select(-july.year) %>%
                    relocate(year, .after = last_col()) %>%
                    tableGrob(theme = 
