@@ -4,8 +4,6 @@ library('readr')     # to read in files as tibbles
 
 # data wrangling
 library('dplyr')     # makes data wrangling easier
-library('tibble')    # a tibble is a fancy data.frame
-library('tidyr')     # for pivot_*() functions
 library('lubridate') # makes dealing with dates smoother
 
 # model fitting
@@ -14,8 +12,9 @@ library('mgcv')      # to fit GAMs
 
 # graphics
 library('ggplot2')   # fancy plots
-library('cowplot')   # ggplot in grids
-library('gridExtra') # for tables in ggplots
+library("patchwork") # ggplot in grids
+library("gridExtra") # for tables in ggplots
+library("gratia")
 
 # source functions
 source('functions/post.ref.date.R') # DOY => post Jun 30 / Sep 30
@@ -33,9 +32,9 @@ plot(1:length(pal), col = pal, cex = 5, pch = 15)
 june.lab <- expression(Days~after~June~30^{th})
 
 # Import and process data ####
-# https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-ntl.33.35
+# https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-ntl.33.37
 mendota <-
-  read_csv('data/madison.csv', col_types = 'ccdcdcdd') %>%
+  read_csv('data/ntl33_v10.csv', col_types = 'ccdcdcdd') %>%
   filter(lakeid == 'ME', year4 >= 1950) %>%
   transmute(year = year4,
             july.year = season,
@@ -56,8 +55,8 @@ filter(mendota, is.na(froze + thawed) | froze + thawed != 2)
 freeze <-
   select(mendota, year, july.year, froze, on.date, on.doy, on.doy.jul) %>%
   as_ped(formula = Surv(time = on.doy.jul,       # follow-up time
-                        event = froze) ~ ., # did the lake freeze? TRUE/FALSE
-         cut = 150:210) # split into 1-day intervals
+    event = froze) ~ ., # did the lake freeze? TRUE/FALSE
+  cut = 150:210) # split into 1-day intervals
 
 ## column values:
 #' id        : ID for "patient" (i.e. year)
@@ -70,24 +69,26 @@ freeze <-
 #' season    : year starting in June (e.g. 2000-2001)
 
 # basic scatterplot
-scatter.f <-
+mendota_ts_plt <-
   ggplot(mendota) +
   geom_line(aes(year, on.doy.jul), alpha = 0.25) +
-  geom_point(aes(year, on.doy.jul), alpha = 0.5) +
-  labs(x = 'Year', y = june.lab); scatter.f
+  geom_point(aes(year, on.doy.jul), alpha = 1) +
+  labs(x = "Year", y = june.lab)
+mendota_ts_plt
 
 # visualize time-to-event nature of the data
 viz.f <-
   freeze %>%
   bind_rows(tibble(year = unique(mendota$year), tend = 150, ped_status = 0)) %>%
   bind_rows(tibble(year = unique(mendota$year), tend = 210, ped_status = 1)) %>%
-  mutate(status = if_else(ped_status == 1, 'thawed', 'frozen')) %>%
+  mutate(status = if_else(ped_status == 1, "thawed", "frozen")) %>%
   ggplot() +
   geom_line(aes(tend, year, color = status, group = year)) +
   geom_point(aes(tend, year, color = status, group = year), alpha = 0.5) +
-  scale_color_manual('Froze', values = pal[2:1], labels = c('No', 'Yes')) +
-  labs(x = june.lab, y = 'Year') +
-  theme(legend.position = 'none'); viz.f
+  scale_color_manual("Froze", values = pal[2:1], labels = c("No", "Yes")) +
+  labs(x = june.lab, y = "Year") +
+  theme(legend.position = "none")
+viz.f
 
 # Model fitting ####
 #' by default, `pamm()` uses:
@@ -98,7 +99,7 @@ viz.f <-
 # model hazard of freezing
 pam.f <-
   pamm(ped_status ~
-         s(tend, bs = 'tp', k = 5) +       # effect of DOY
+         s(tend, bs = 'tp', k = 10) +      # effect of DOY
          s(year, bs = 'tp', k = 10) +      # effect of year
          ti(tend, year, bs = 'tp', k = 5), # change in effect of DOY over years
        data = freeze)
@@ -106,6 +107,7 @@ pam.f <-
 # Plots ####
 ## Freezing ----
 # predictions grouped by year
+# GLS: ignore warnings; bug in pammtools, see https://github.com/adibender/pammtools/issues/235
 pred.freeze <-
   freeze %>%
   make_newdata(tend = unique(tend),
@@ -128,14 +130,16 @@ ggplot(pred.freeze, aes(year, tend, fill = freeze.prob)) +
 
 # P(frozen) by year
 plt.f.p.year <-
-  filter(pred.freeze, year %in% c(1950, 1980, 2010)) %>%
+  filter(pred.freeze, year %in% c(1950, 1980, 2010, 2020)) %>%
   mutate(year = factor(year)) %>%
   ggplot(aes(tend, freeze.prob, group = year)) +
   geom_line(aes(color = year), lwd = 1) +
   geom_ribbon(aes(ymin = f.p.lwr, ymax = f.p.upr, fill = year), alpha = 0.1) +
   labs(x = june.lab, y = expression(widehat(F)[freeze](t))) +
-  scale_color_manual('Year', values = pal, aesthetics = c('color', 'fill')) +
-  theme(legend.key.width = unit(1, 'cm')); plt.f.p.year
+  scale_color_manual("Year", values = pal[c(1:3, 7)],
+    aesthetics = c("color", "fill")) +
+  theme(legend.key.width = unit(1, "cm"), legend.position = "top")
+plt.f.p.year
 
 # P(frozen) by tend
 plt.f.p.tend <-
@@ -144,9 +148,10 @@ plt.f.p.tend <-
   ggplot(aes(year, freeze.prob, group = tend)) +
   geom_ribbon(aes(ymin = f.p.lwr, ymax = f.p.upr, fill = tend), alpha = 0.1) +
   geom_line(aes(color = tend), lwd = 1) +
-  labs(x = 'Year', y = expression(widehat(F)[freeze](t))) +
-  scale_color_manual(june.lab, values = pal, aesthetics = c('color', 'fill')) +
-  theme(legend.key.width = unit(1, 'cm')); plt.f.p.tend
+  labs(x = "Year", y = expression(widehat(F)[freeze](t))) +
+  scale_color_manual(june.lab, values = pal[c(1:3, 7)], aesthetics = c("color", "fill")) +
+  theme(legend.key.width = unit(1, "cm"), legend.position = "top")
+plt.f.p.tend
 
 # stepwise hazard
 plt.f.step.year <-
@@ -156,7 +161,9 @@ plt.f.step.year <-
   geom_stephazard(aes(y = hazard, col = year), lwd = 1) +
   xlim(c(155, NA)) +
   labs(x = june.lab, y = expression(widehat(lambda)[freeze](t))) +
-  scale_color_manual('Year', values = pal, aesthetics = c('color', 'fill')); plt.f.step.year
+  scale_color_manual("Year", values = pal[c(1:3, 7)],
+    aesthetics = c("color", "fill"))
+plt.f.step.year
 
 # piecewise cumulative hazard
 plt.f.haz.year <-
@@ -166,10 +173,12 @@ plt.f.haz.year <-
   geom_hazard(aes(y = cumu_hazard, col = year), lwd = 1) +
   xlim(c(155, NA)) +
   labs(x = june.lab, y = expression(widehat(Lambda)[freeze](t))) +
-  scale_color_manual('Year', values = pal, aesthetics = c('color', 'fill')); plt.f.haz.year
+  scale_color_manual("Year", values = pal[c(1:3, 7)],
+    aesthetics = c("color", "fill"))
+plt.f.haz.year
 
 # ti term
-gratia:::draw.gam(pam.f, select = 3, dist = 1) # quite flat
+gratia::draw(pam.f, select = 3, dist = 1, rug = FALSE) # quite flat
 
 # smooth term of year
 freeze %>%
@@ -195,21 +204,22 @@ est <-
 # add estimated day and 95% CIs
 scatter.f.est <-
   scatter.f +
-  geom_ribbon(aes(year, ymin = lwr, ymax = upr), est, fill = 'steelblue',
-              alpha = 0.3) +
-  geom_step(aes(year, doy), est, color = 'steelblue', lwd = 1); scatter.f.est
+  geom_ribbon(aes(year, ymin = lwr, ymax = upr), est, fill = "steelblue",
+    alpha = 0.3) +
+  geom_step(aes(year, doy), est, color = "steelblue", lwd = 1)
+scatter.f.est
 
-plt <- plot_grid(scatter.f.est,
-                 freeze %>%
-                   filter(year == 1976) %>%
-                   select(-july.year) %>%
-                   relocate(year, .after = last_col()) %>%
-                   tableGrob(theme = 
-                               ttheme_default(padding = unit(c(3, 3), 'mm'))),
-                 plt.f.p.year, plt.f.p.tend, #plt.f.p.ti,
-                 # plt.f.step.year,
-                 #plt.f.haz.year,
-                 ncol = 2,
-                 labels = c('a.', 'b.', 'c.', 'd.'),
-                 rel_heights = c(1, 1, 1.25, 1.25))
+tbl_grob <- freeze %>%
+  filter(year == 1976) %>%
+  select(-july.year) %>%
+  relocate(year, .after = last_col()) %>%
+  tableGrob(theme =
+    ttheme_default(padding = unit(c(3, 3), "mm")))
+
+plt <- scatter.f.est + tbl_grob + plt.f.p.year + plt.f.p.tend +
+  plot_layout(ncol = 2) +
+  plot_annotation(tag_levels = "a", tag_suffix = ".")
+plt
+
+ggsave("plots/mendota-freeze-viz.pdf", height = 3.5, width = 6.86, scale = 2)
 # save.plt(plt, 'mendota-freeze-viz.pdf', height = 3.5, width = 6.86, scale = 2)
